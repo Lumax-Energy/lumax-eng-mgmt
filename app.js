@@ -27,6 +27,7 @@
     settings: loadSettings(),
     githubUser: null,
     fileSha: localStorage.getItem(LS_SHA) || null,
+    loadedThisSession: false, // set true after a successful Load this page session
     editingProjectId: null,
     editingTaskId: null,
     syncOp: null, // 'load' | 'save' | null — one in-flight sync at a time
@@ -53,6 +54,12 @@
     el.textContent = msg;
     bar.appendChild(el);
     setTimeout(() => el.remove(), 4200);
+  }
+  function localSaveHint(baseMsg) {
+    if (state.settings.pat) {
+      return baseMsg + " — click Save to GitHub to sync";
+    }
+    return baseMsg + " — set PAT in Settings to sync";
   }
   function setSyncBusy(op) {
     state.syncOp = op;
@@ -170,6 +177,7 @@
       state.fileSha = meta.sha;
       const json = JSON.parse(atob(meta.content.replace(/\n/g, "")));
       state.data = normalizeData(json);
+      state.loadedThisSession = true;
       cacheDataLocally();
       markLastSync("Load");
       render();
@@ -191,22 +199,69 @@
     }
     setSyncBusy("save");
     try {
-      // Use SHA from last successful Load/Save only. Never re-fetch SHA then overwrite —
-      // that silently clobbers others' saves. On conflict, ask the user to Load first.
-      const sha = state.fileSha;
+      // If we already have a SHA from Load/Save, use it only — do NOT re-fetch SHA then
+      // overwrite (that silently clobbers others). When SHA is missing (never Loaded),
+      // GET metadata only to obtain sha; never replace state.data with remote.
+      const shaWasMissing = !state.fileSha;
+      if (shaWasMissing) {
+        const getRes = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders() });
+        if (getRes.status === 401) {
+          throw new Error("PAT invalid or expired. Update in Settings.");
+        }
+        if (getRes.status === 403) {
+          throw new Error(
+            "PAT lacks Contents write on Lumax-Energy/lumax-eng-mgmt (need classic repo or fine-grained Contents R/W)."
+          );
+        }
+        if (getRes.status === 404) {
+          // File does not exist yet — PUT without sha (create).
+          state.fileSha = null;
+        } else if (!getRes.ok) {
+          const err = await getRes.json().catch(() => ({}));
+          throw new Error(err.message || "Could not read file metadata (" + getRes.status + ")");
+        } else {
+          const meta = await getRes.json();
+          state.fileSha = meta.sha;
+          // Soft check: only when sha was missing at start and we never Loaded this session.
+          if (!state.loadedThisSession && meta.content) {
+            let remoteStr = "";
+            try {
+              remoteStr = decodeURIComponent(escape(atob(meta.content.replace(/\n/g, ""))));
+            } catch (_) {
+              remoteStr = atob(meta.content.replace(/\n/g, ""));
+            }
+            const localStr = JSON.stringify(state.data, null, 2);
+            if (remoteStr !== localStr) {
+              const ok = confirm(
+                "Remote data differs from this browser. Save will overwrite GitHub with what's on screen. Continue?"
+              );
+              if (!ok) return;
+            }
+          }
+        }
+      }
+
       state.data.updatedAt = nowIso();
       const body = {
         message: "Update engineering projects data",
         content: btoa(unescape(encodeURIComponent(JSON.stringify(state.data, null, 2)))),
         branch: "main",
       };
-      if (sha) body.sha = sha;
+      if (state.fileSha) body.sha = state.fileSha;
 
       const putRes = await fetch(contentsUrl(), {
         method: "PUT",
         headers: ghHeaders(true),
         body: JSON.stringify(body),
       });
+      if (putRes.status === 401) {
+        throw new Error("PAT invalid or expired. Update in Settings.");
+      }
+      if (putRes.status === 403) {
+        throw new Error(
+          "PAT lacks Contents write on Lumax-Energy/lumax-eng-mgmt (need classic repo or fine-grained Contents R/W)."
+        );
+      }
       if (putRes.status === 409 || putRes.status === 422) {
         const err = await putRes.json().catch(() => ({}));
         const msg = err.message || ("conflict (" + putRes.status + ")");
@@ -544,6 +599,7 @@
         `<div class="form-group"><label>Personal Access Token (PAT)</label>` +
         `<input id="set-pat" type="password" autocomplete="off" value="" placeholder="${s.pat ? "•••• token saved — paste to replace" : "ghp_… or github_pat_…"}" />` +
         `<p class="hint">Stored only in this browser's localStorage (never logged, never written to projects.json). Leave blank to keep the saved token. Use classic <code>repo</code> scope, or fine-grained Contents Read/Write + Metadata on this repo. Each engineer uses their own PAT.</p></div>` +
+        `<p class="hint">Click Load once after setting PAT, then Save to GitHub after edits.</p>` +
         `<p class="sync-info">Data file path: <code>${DATA_PATH}</code>. Load/Save use the Contents API (GET + PUT with SHA).</p>` +
         `<div class="panel-actions">` +
         `<button type="button" class="btn btn-secondary" id="set-cancel">Cancel</button>` +
@@ -690,7 +746,7 @@
       cacheDataLocally();
       closeOverlay();
       render();
-      toast(isEdit ? "Project updated" : "Project created", "success");
+      toast(localSaveHint(isEdit ? "Project updated" : "Project created"), "success");
     };
   }
 
@@ -839,7 +895,7 @@
       cacheDataLocally();
       closeOverlay();
       render();
-      toast(isEdit ? "Task updated" : "Task created", "success");
+      toast(localSaveHint(isEdit ? "Task updated" : "Task created"), "success");
     };
   }
 

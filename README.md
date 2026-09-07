@@ -65,9 +65,10 @@ When a PAT is set, the header shows the authenticated user from `GET /user`.
 
 ### 3. Load / Save sync
 
-- **Load** — `GET` `data/projects.json` via GitHub Contents API (reads SHA).
-- **Save** — `PUT` with the current SHA (optimistic concurrency). Message: `Update engineering projects data`.
-- Conflicts: Save uses the SHA from your last successful **Load**/**Save**. If someone else saved first, GitHub rejects the write — **Load**, merge carefully, then **Save** again. The app does **not** silently refresh SHA and overwrite.
+- **Load** — `GET` `data/projects.json` via GitHub Contents API (reads SHA). Click **Load** once after setting a PAT.
+- **Save to GitHub** — `PUT` with the current SHA (optimistic concurrency). Message: `Update engineering projects data`. Form **Save** only writes to this browser’s `localStorage`; use the header button to sync.
+- If SHA is missing (never Loaded), Save fetches file metadata only to obtain the SHA — it does **not** replace on-screen data with remote. You may be asked to confirm if remote differs.
+- Conflicts: Save uses the SHA from your last successful **Load**/**Save** (or the metadata fetch above). If someone else saved first, GitHub rejects the write — **Load**, merge carefully, then **Save to GitHub** again. The app does **not** silently refresh SHA on conflict and overwrite.
 - A local cache of the last loaded data is kept in `localStorage` as a backup.
 
 ### 4. Offline Export / Import
