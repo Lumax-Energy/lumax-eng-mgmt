@@ -1,22 +1,35 @@
 {
   "version": 1,
-  "updatedAt": "2026-09-07T17:00:00.000Z",
+  "updatedAt": "2026-09-07T20:39:06.030Z",
   "projects": [
     {
       "id": "proj-sample-demo-001",
-      "clientName": "Demo Client",
+      "clientName": "Demo",
       "projectName": "SAMPLE — Demo Solar Array",
       "projectCode": "DEMO-001",
       "salesOrderNumber": "SO-DEMO-1001",
-      "drawingNumbers": ["DRW-DEMO-001", "DRW-DEMO-002", "DRW-DEMO-003"],
+      "drawingNumbers": [
+        "DRW-DEMO-001",
+        "DRW-DEMO-002",
+        "DRW-DEMO-003"
+      ],
       "customFields": {
-        "Site Location": "Fictional Industrial Park",
+        "Site Location": "Fictional Industrial Park 201",
         "Voltage": "11 kV"
       },
       "phases": [
-        { "id": "phase-foundation", "name": "Foundation" },
-        { "id": "phase-building", "name": "Building" },
-        { "id": "phase-inspection", "name": "Inspection" }
+        {
+          "id": "phase-foundation",
+          "name": "Foundation"
+        },
+        {
+          "id": "phase-building",
+          "name": "Building"
+        },
+        {
+          "id": "phase-inspection",
+          "name": "Inspection"
+        }
       ],
       "tasks": [
         {
@@ -68,11 +81,31 @@
           "priority": "low",
           "dueDate": "2026-10-15",
           "phaseId": "phase-inspection"
+        },
+        {
+          "id": "task-ujofwt1vsysi",
+          "title": "Structure",
+          "description": "Inspect",
+          "assignee": "L",
+          "status": "doing",
+          "priority": "high",
+          "dueDate": "2026-09-08",
+          "phaseId": "phase-inspection"
+        },
+        {
+          "id": "task-r09exo7pe416",
+          "title": "yolo",
+          "description": "",
+          "assignee": "L",
+          "status": "todo",
+          "priority": "medium",
+          "dueDate": "2026-09-10",
+          "phaseId": "phase-foundation"
         }
       ],
       "archived": false,
       "createdAt": "2026-08-01T08:00:00.000Z",
-      "updatedAt": "2026-09-07T17:00:00.000Z"
+      "updatedAt": "2026-09-07T20:38:53.418Z"
     }
   ]
 }
