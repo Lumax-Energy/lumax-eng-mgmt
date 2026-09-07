@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-07T17:00:00.000Z",
+  "projects": [
+    {
+      "id": "proj-sample-demo-001",
+      "clientName": "Demo Client",
+      "projectName": "SAMPLE — Demo Solar Array",
+      "projectCode": "DEMO-001",
+      "salesOrderNumber": "SO-DEMO-1001",
+      "drawingNumbers": ["DRW-DEMO-001", "DRW-DEMO-002", "DRW-DEMO-003"],
+      "customFields": {
+        "Site Location": "Fictional Industrial Park",
+        "Voltage": "11 kV"
+      },
+      "phases": [
+        { "id": "phase-foundation", "name": "Foundation" },
+        { "id": "phase-building", "name": "Building" },
+        { "id": "phase-inspection", "name": "Inspection" }
+      ],
+      "tasks": [
+        {
+          "id": "task-1",
+          "title": "Review geotech report",
+          "description": "Confirm soil bearing capacity for pile design (SAMPLE data).",
+          "assignee": "Alex Engineer",
+          "status": "done",
+          "priority": "high",
+          "dueDate": "2026-08-15",
+          "phaseId": "phase-foundation"
+        },
+        {
+          "id": "task-2",
+          "title": "Issue foundation GA drawing",
+          "description": "Prepare general arrangement for Demo Client foundation.",
+          "assignee": "Sam Drafter",
+          "status": "doing",
+          "priority": "high",
+          "dueDate": "2026-09-20",
+          "phaseId": "phase-foundation"
+        },
+        {
+          "id": "task-3",
+          "title": "Structural steel BOM",
+          "description": "Compile bill of materials for building steelwork.",
+          "assignee": "Jordan Eng",
+          "status": "todo",
+          "priority": "medium",
+          "dueDate": "2026-10-01",
+          "phaseId": "phase-building"
+        },
+        {
+          "id": "task-4",
+          "title": "Cable routing layout",
+          "description": "Route DC and AC cables on site plan.",
+          "assignee": "Alex Engineer",
+          "status": "todo",
+          "priority": "medium",
+          "dueDate": null,
+          "phaseId": "phase-building"
+        },
+        {
+          "id": "task-5",
+          "title": "Pre-inspection checklist",
+          "description": "Compile inspection hold points for SAMPLE project.",
+          "assignee": "Sam Drafter",
+          "status": "todo",
+          "priority": "low",
+          "dueDate": "2026-10-15",
+          "phaseId": "phase-inspection"
+        }
+      ],
+      "archived": false,
+      "createdAt": "2026-08-01T08:00:00.000Z",
+      "updatedAt": "2026-09-07T17:00:00.000Z"
+    }
+  ]
+}

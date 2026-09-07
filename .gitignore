@@ -1,0 +1,18 @@
+# Local / OS
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Never commit secrets (PATs live in browser localStorage only)
+*.pem
+*.key
+secrets/
