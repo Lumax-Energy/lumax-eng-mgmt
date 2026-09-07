@@ -476,7 +476,7 @@
           throw new Error(err.message || "Could not read file metadata (" + getRes.status + ")");
         } else {
           const meta = await getRes.json();
-          state.fileSha = meta.sha;
+          const remoteSha = meta.sha;
           if (!state.loadedThisSession && meta.content) {
             let remoteStr = "";
             try {
@@ -492,6 +492,7 @@
               if (!ok) return;
             }
           }
+          state.fileSha = remoteSha;
         }
       }
 
