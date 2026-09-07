@@ -2,6 +2,17 @@
 
 Single-page static app for engineering project & task tracking. No build step. Works on **GitHub Pages** or any static host.
 
+## Go live (5 steps)
+
+1. Invite engineers with at least **Write** on this repo.
+2. Each person creates **their own** PAT (classic `repo`, or fine-grained Contents Read/Write + Metadata on this repo only).
+3. Enable **GitHub Pages**: branch `main`, folder `/` (root) — or run `npx serve .` / `python3 -m http.server 8080` locally. Avoid `file://`.
+4. Open the Pages (or local) URL → **Settings** → confirm owner/repo → paste PAT → **Load**.
+5. Sample project **DEMO-001 / Demo Client** is **fictional SAMPLE data** — edit or delete after onboarding. Never commit real PATs.
+
+For host ranking and concrete Cloudflare / Render / Pages steps, see **[DEPLOY.md](./DEPLOY.md)**.
+
+
 ## Files
 
 | Path | Purpose |
@@ -10,6 +21,7 @@ Single-page static app for engineering project & task tracking. No build step. W
 | `styles.css` | UI styles |
 | `app.js` | App logic (vanilla JS) |
 | `data/projects.json` | Shared project/task data (synced via GitHub API) |
+| `DEPLOY.md` | Go-live host ranking + Cloudflare / Render / Pages steps |
 
 ## Prefer Pages or a local static server
 
@@ -47,7 +59,7 @@ Opening `index.html` via `file://` often breaks:
   - **Contents:** Read and Write
   - **Metadata:** Read-only
 
-In the app: **Settings** → paste owner/repo (defaults `Lumax-Energy` / `lumax-eng-mgmt`) and your PAT. The PAT is stored **only in localStorage** in your browser — it is **never** written into `data/projects.json` or any committed file.
+In the app: **Settings** → paste owner/repo (defaults `Lumax-Energy` / `lumax-eng-mgmt`) and your PAT. The PAT is stored **only in localStorage** in your browser — it is **never** written into `data/projects.json`, never committed, and must never be logged or pasted into chat.
 
 When a PAT is set, the header shows the authenticated user from `GET /user`.
 
@@ -55,7 +67,7 @@ When a PAT is set, the header shows the authenticated user from `GET /user`.
 
 - **Load** — `GET` `data/projects.json` via GitHub Contents API (reads SHA).
 - **Save** — `PUT` with the current SHA (optimistic concurrency). Message: `Update engineering projects data`.
-- Conflicts: if someone else saved first, re-**Load**, merge carefully, then **Save** again.
+- Conflicts: Save uses the SHA from your last successful **Load**/**Save**. If someone else saved first, GitHub rejects the write — **Load**, merge carefully, then **Save** again. The app does **not** silently refresh SHA and overwrite.
 - A local cache of the last loaded data is kept in `localStorage` as a backup.
 
 ### 4. Offline Export / Import

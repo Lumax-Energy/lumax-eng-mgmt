@@ -29,6 +29,7 @@
     fileSha: localStorage.getItem(LS_SHA) || null,
     editingProjectId: null,
     editingTaskId: null,
+    syncOp: null, // 'load' | 'save' | null — one in-flight sync at a time
   };
 
   // ---------- Utils ----------
@@ -52,6 +53,20 @@
     el.textContent = msg;
     bar.appendChild(el);
     setTimeout(() => el.remove(), 4200);
+  }
+  function setSyncBusy(op) {
+    state.syncOp = op;
+    const loadBtn = document.getElementById("btn-load");
+    const saveBtn = document.getElementById("btn-save");
+    if (loadBtn) loadBtn.disabled = !!op;
+    if (saveBtn) saveBtn.disabled = !!op;
+  }
+  function markLastSync(kind) {
+    const el = document.getElementById("last-sync");
+    if (!el) return;
+    const t = new Date();
+    el.textContent = "Sync: " + kind + " " + t.toLocaleString();
+    el.title = "Last successful " + kind + " at " + t.toISOString();
   }
   function loadSettings() {
     try {
@@ -139,6 +154,11 @@
       toast("Set a Personal Access Token in Settings first.", "error");
       return;
     }
+    if (state.syncOp) {
+      toast("Sync already in progress.", "error");
+      return;
+    }
+    setSyncBusy("load");
     try {
       const res = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders() });
       if (res.status === 404) {
@@ -151,10 +171,13 @@
       const json = JSON.parse(atob(meta.content.replace(/\n/g, "")));
       state.data = normalizeData(json);
       cacheDataLocally();
+      markLastSync("Load");
       render();
       toast("Loaded from GitHub (" + state.settings.owner + "/" + state.settings.repo + ")", "success");
     } catch (e) {
       toast("GitHub load error: " + e.message + ". Prefer GitHub Pages or a local static server (CORS).", "error");
+    } finally {
+      setSyncBusy(null);
     }
   }
   async function saveToGithub() {
@@ -162,17 +185,15 @@
       toast("Set a Personal Access Token in Settings first.", "error");
       return;
     }
+    if (state.syncOp) {
+      toast("Sync already in progress.", "error");
+      return;
+    }
+    setSyncBusy("save");
     try {
-      // Refresh SHA to reduce conflicts
-      let sha = state.fileSha;
-      const getRes = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders() });
-      if (getRes.ok) {
-        const meta = await getRes.json();
-        sha = meta.sha;
-      } else if (getRes.status !== 404) {
-        throw new Error("Could not read current SHA (" + getRes.status + ")");
-      }
-
+      // Use SHA from last successful Load/Save only. Never re-fetch SHA then overwrite —
+      // that silently clobbers others' saves. On conflict, ask the user to Load first.
+      const sha = state.fileSha;
       state.data.updatedAt = nowIso();
       const body = {
         message: "Update engineering projects data",
@@ -186,6 +207,13 @@
         headers: ghHeaders(true),
         body: JSON.stringify(body),
       });
+      if (putRes.status === 409 || putRes.status === 422) {
+        const err = await putRes.json().catch(() => ({}));
+        const msg = err.message || ("conflict (" + putRes.status + ")");
+        throw new Error(
+          "Conflict — someone else saved first. Load, merge carefully, then Save again. (" + msg + ")"
+        );
+      }
       if (!putRes.ok) {
         const err = await putRes.json().catch(() => ({}));
         throw new Error(err.message || "Save failed (" + putRes.status + ")");
@@ -193,9 +221,12 @@
       const result = await putRes.json();
       state.fileSha = result.content && result.content.sha;
       cacheDataLocally();
+      markLastSync("Save");
       toast("Saved to GitHub", "success");
     } catch (e) {
       toast("GitHub save error: " + e.message, "error");
+    } finally {
+      setSyncBusy(null);
     }
   }
   function exportJson() {
@@ -332,8 +363,13 @@
 
     const grid = document.getElementById("project-grid");
     if (!projects.length) {
-      grid.innerHTML =
-        '<div class="empty-state">No projects found. Create one or Load from GitHub / Import JSON.</div>';
+      const hasAny = (state.data.projects || []).length > 0;
+      const msg = q
+        ? "No projects match this search. Clear the search box to see all."
+        : hasAny
+          ? "No projects to show. Enable Show archived, or create a new project."
+          : "No projects yet. Create one, Load from GitHub, or Import JSON. Prefer GitHub Pages or a local static server (not file://).";
+      grid.innerHTML = '<div class="empty-state">' + msg + "</div>";
       return;
     }
     grid.innerHTML = projects
@@ -506,8 +542,8 @@
         `<div class="form-group"><label>Repository</label>` +
         `<input id="set-repo" value="${escapeHtml(s.repo)}" /></div>` +
         `<div class="form-group"><label>Personal Access Token (PAT)</label>` +
-        `<input id="set-pat" type="password" autocomplete="off" value="${escapeHtml(s.pat)}" placeholder="ghp_… or github_pat_…" />` +
-        `<p class="hint">Stored only in this browser's localStorage. Never written to projects.json. Use classic <code>repo</code> scope, or fine-grained Contents Read/Write + Metadata on this repo. Each engineer uses their own PAT.</p></div>` +
+        `<input id="set-pat" type="password" autocomplete="off" value="" placeholder="${s.pat ? "•••• token saved — paste to replace" : "ghp_… or github_pat_…"}" />` +
+        `<p class="hint">Stored only in this browser's localStorage (never logged, never written to projects.json). Leave blank to keep the saved token. Use classic <code>repo</code> scope, or fine-grained Contents Read/Write + Metadata on this repo. Each engineer uses their own PAT.</p></div>` +
         `<p class="sync-info">Data file path: <code>${DATA_PATH}</code>. Load/Save use the Contents API (GET + PUT with SHA).</p>` +
         `<div class="panel-actions">` +
         `<button type="button" class="btn btn-secondary" id="set-cancel">Cancel</button>` +
@@ -518,7 +554,8 @@
     document.getElementById("set-save").onclick = () => {
       state.settings.owner = document.getElementById("set-owner").value.trim() || DEFAULT_OWNER;
       state.settings.repo = document.getElementById("set-repo").value.trim() || DEFAULT_REPO;
-      state.settings.pat = document.getElementById("set-pat").value.trim();
+      const nextPat = document.getElementById("set-pat").value.trim();
+      if (nextPat) state.settings.pat = nextPat;
       saveSettings();
       closeOverlay();
       updateAuthBadge();
