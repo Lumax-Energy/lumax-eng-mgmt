@@ -10,6 +10,8 @@ Single-page static app for engineering project & task tracking. No build step. W
 4. Open the Pages (or local) URL → **Settings** → confirm owner/repo → paste PAT → **Load**.
 5. Sample project **DEMO-001 / Demo Client** is **fictional SAMPLE data** — edit or delete after onboarding. Never commit real PATs.
 
+For host ranking and concrete Cloudflare / Render / Pages steps, see **[DEPLOY.md](./DEPLOY.md)**.
+
 
 ## Files
 
@@ -19,6 +21,7 @@ Single-page static app for engineering project & task tracking. No build step. W
 | `styles.css` | UI styles |
 | `app.js` | App logic (vanilla JS) |
 | `data/projects.json` | Shared project/task data (synced via GitHub API) |
+| `DEPLOY.md` | Go-live host ranking + Cloudflare / Render / Pages steps |
 
 ## Prefer Pages or a local static server
 
