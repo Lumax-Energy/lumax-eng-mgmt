@@ -5,25 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Lumax Energy — Engineering Management</title>
   <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
   <header class="app-header">
-    <h1>Lumax Energy — Engineering Management</h1>
+    <div class="header-title">
+      <h1>Lumax Energy — Eng Mgmt</h1>
+      <span class="version-badge">v2.0</span>
+    </div>
+    <nav class="top-nav" id="top-nav" aria-label="Primary">
+      <button type="button" class="nav-btn active" data-view="dashboard">Dashboard</button>
+      <button type="button" class="nav-btn" data-view="projects">Projects</button>
+      <button type="button" class="nav-btn" data-view="tasks">Tasks</button>
+    </nav>
     <div class="header-actions">
+      <input type="search" class="search-input header-search" id="global-search" placeholder="Search…" aria-label="Search" />
       <span class="auth-badge" id="auth-badge">Not signed in</span>
+      <span class="last-sync" id="last-sync"></span>
       <button type="button" class="btn btn-ghost btn-sm" id="btn-load" title="Load data/projects.json from GitHub">Load</button>
-      <button type="button" class="btn btn-ghost btn-sm" id="btn-save" title="Save data/projects.json to GitHub">Save to GitHub</button>
-      <button type="button" class="btn btn-ghost btn-sm" id="btn-export">Export</button>
-      <button type="button" class="btn btn-ghost btn-sm" id="btn-import">Import</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-save" title="Save data/projects.json to GitHub">Save</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-export-excel" title="Export Excel (.xlsx)">Export Excel</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-import" title="Import JSON backup">Import</button>
       <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
       <button type="button" class="btn btn-ghost btn-sm" id="btn-settings">Settings</button>
     </div>
   </header>
 
   <main class="main">
-    <section id="view-list">
+    <section id="view-dashboard" class="view"></section>
+    <section id="view-projects" class="view hidden">
       <div class="toolbar">
-        <input type="search" class="search-input" id="search" placeholder="Search client, project code, or sales order…" />
         <label class="checkbox-label">
           <input type="checkbox" id="show-archived" /> Show archived
         </label>
@@ -31,8 +42,8 @@
       </div>
       <div class="project-grid" id="project-grid"></div>
     </section>
-
-    <section id="view-detail" class="hidden"></section>
+    <section id="view-tasks" class="view hidden"></section>
+    <section id="view-detail" class="view hidden"></section>
   </main>
 
   <div class="overlay hidden" id="overlay"></div>

@@ -1,11 +1,52 @@
 {
-  "version": 1,
-  "updatedAt": "2026-09-07T20:39:06.030Z",
+  "version": 2,
+  "updatedAt": "2026-09-07T20:54:23.000Z",
+  "settings": {
+    "taskStatuses": [
+      {
+        "id": "status-backlog",
+        "name": "Backlog",
+        "color": "#6b7c93",
+        "category": "todo"
+      },
+      {
+        "id": "status-todo",
+        "name": "To do",
+        "color": "#5c6b7e",
+        "category": "todo"
+      },
+      {
+        "id": "status-doing",
+        "name": "Doing",
+        "color": "#2f80ed",
+        "category": "doing"
+      },
+      {
+        "id": "status-in-check",
+        "name": "In check",
+        "color": "#9b59b6",
+        "category": "doing"
+      },
+      {
+        "id": "status-blocked",
+        "name": "Blocked",
+        "color": "#c0392b",
+        "category": null
+      },
+      {
+        "id": "status-done",
+        "name": "Done",
+        "color": "#1a7f4b",
+        "category": "done"
+      }
+    ],
+    "myAssignee": ""
+  },
   "projects": [
     {
       "id": "proj-sample-demo-001",
       "clientName": "Demo",
-      "projectName": "SAMPLE — Demo Solar Array",
+      "projectName": "SAMPLE \u2014 Demo Solar Array",
       "projectCode": "DEMO-001",
       "salesOrderNumber": "SO-DEMO-1001",
       "drawingNumbers": [
@@ -19,93 +60,183 @@
       },
       "phases": [
         {
-          "id": "phase-foundation",
-          "name": "Foundation"
+          "id": "phase-intake",
+          "name": "Intake"
         },
         {
-          "id": "phase-building",
-          "name": "Building"
+          "id": "phase-concept",
+          "name": "Concept"
         },
         {
-          "id": "phase-inspection",
-          "name": "Inspection"
-        }
-      ],
-      "tasks": [
-        {
-          "id": "task-1",
-          "title": "Review geotech report",
-          "description": "Confirm soil bearing capacity for pile design (SAMPLE data).",
-          "assignee": "Alex Engineer",
-          "status": "done",
-          "priority": "high",
-          "dueDate": "2026-08-15",
-          "phaseId": "phase-foundation"
+          "id": "phase-design",
+          "name": "Design"
         },
         {
-          "id": "task-2",
-          "title": "Issue foundation GA drawing",
-          "description": "Prepare general arrangement for Demo Client foundation.",
-          "assignee": "Sam Drafter",
-          "status": "doing",
-          "priority": "high",
-          "dueDate": "2026-09-20",
-          "phaseId": "phase-foundation"
+          "id": "phase-check",
+          "name": "Check"
         },
         {
-          "id": "task-3",
-          "title": "Structural steel BOM",
-          "description": "Compile bill of materials for building steelwork.",
-          "assignee": "Jordan Eng",
-          "status": "todo",
-          "priority": "medium",
-          "dueDate": "2026-10-01",
-          "phaseId": "phase-building"
+          "id": "phase-drawings",
+          "name": "Drawings"
         },
         {
-          "id": "task-4",
-          "title": "Cable routing layout",
-          "description": "Route DC and AC cables on site plan.",
-          "assignee": "Alex Engineer",
-          "status": "todo",
-          "priority": "medium",
-          "dueDate": null,
-          "phaseId": "phase-building"
+          "id": "phase-site",
+          "name": "Site/Construction support"
         },
         {
-          "id": "task-5",
-          "title": "Pre-inspection checklist",
-          "description": "Compile inspection hold points for SAMPLE project.",
-          "assignee": "Sam Drafter",
-          "status": "todo",
-          "priority": "low",
-          "dueDate": "2026-10-15",
-          "phaseId": "phase-inspection"
-        },
-        {
-          "id": "task-ujofwt1vsysi",
-          "title": "Structure",
-          "description": "Inspect",
-          "assignee": "L",
-          "status": "doing",
-          "priority": "high",
-          "dueDate": "2026-09-08",
-          "phaseId": "phase-inspection"
-        },
-        {
-          "id": "task-r09exo7pe416",
-          "title": "yolo",
-          "description": "",
-          "assignee": "L",
-          "status": "todo",
-          "priority": "medium",
-          "dueDate": "2026-09-10",
-          "phaseId": "phase-foundation"
+          "id": "phase-closeout",
+          "name": "Close-out"
         }
       ],
       "archived": false,
       "createdAt": "2026-08-01T08:00:00.000Z",
-      "updatedAt": "2026-09-07T20:38:53.418Z"
+      "updatedAt": "2026-09-07T20:54:23.000Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-1",
+      "projectId": "proj-sample-demo-001",
+      "title": "Review geotech report",
+      "description": "Confirm soil bearing capacity for pile design (SAMPLE data).",
+      "type": "eng_task",
+      "statusId": "status-done",
+      "assignee": "Alex Engineer",
+      "priority": "high",
+      "dueDate": "2026-08-15",
+      "phaseId": "phase-intake",
+      "discipline": "Geotech",
+      "blockedReason": "",
+      "doneDate": "2026-08-14",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-08-01T08:00:00.000Z",
+      "updatedAt": "2026-08-14T10:00:00.000Z"
+    },
+    {
+      "id": "task-2",
+      "projectId": "proj-sample-demo-001",
+      "title": "Issue foundation GA drawing",
+      "description": "Prepare general arrangement for Demo Client foundation.",
+      "type": "drawing",
+      "statusId": "status-doing",
+      "assignee": "Sam Drafter",
+      "priority": "high",
+      "dueDate": "2026-09-20",
+      "phaseId": "phase-drawings",
+      "drawingNumber": "DRW-DEMO-001",
+      "rev": "A",
+      "discipline": "",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "createdAt": "2026-08-05T08:00:00.000Z",
+      "updatedAt": "2026-09-07T20:54:23.000Z"
+    },
+    {
+      "id": "task-3",
+      "projectId": "proj-sample-demo-001",
+      "title": "Structural steel BOM",
+      "description": "Compile bill of materials for building steelwork.",
+      "type": "eng_task",
+      "statusId": "status-todo",
+      "assignee": "Jordan Eng",
+      "priority": "medium",
+      "dueDate": "2026-10-01",
+      "phaseId": "phase-design",
+      "discipline": "Structural",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-08-10T08:00:00.000Z",
+      "updatedAt": "2026-09-07T20:54:23.000Z"
+    },
+    {
+      "id": "task-4",
+      "projectId": "proj-sample-demo-001",
+      "title": "Cable routing layout",
+      "description": "Route DC and AC cables on site plan.",
+      "type": "design_check",
+      "statusId": "status-backlog",
+      "assignee": "Alex Engineer",
+      "priority": "medium",
+      "dueDate": null,
+      "phaseId": "phase-design",
+      "checker": "Jordan Eng",
+      "calcOrDrawingRef": "DRW-DEMO-002",
+      "discipline": "",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-08-12T08:00:00.000Z",
+      "updatedAt": "2026-09-07T20:54:23.000Z"
+    },
+    {
+      "id": "task-5",
+      "projectId": "proj-sample-demo-001",
+      "title": "Pre-inspection checklist",
+      "description": "Compile inspection hold points for SAMPLE project.",
+      "type": "eng_task",
+      "statusId": "status-todo",
+      "assignee": "Sam Drafter",
+      "priority": "low",
+      "dueDate": "2026-10-15",
+      "phaseId": "phase-site",
+      "discipline": "QA",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-08-15T08:00:00.000Z",
+      "updatedAt": "2026-09-07T20:54:23.000Z"
+    },
+    {
+      "id": "task-standalone-rdn-1",
+      "projectId": null,
+      "title": "SAMPLE RDN \u2014 Clarification on pile spacing",
+      "description": "Fictional RDN for demo inbox / standalone workflow.",
+      "type": "rdn",
+      "statusId": "status-in-check",
+      "assignee": "Alex Engineer",
+      "priority": "high",
+      "dueDate": "2026-09-12",
+      "phaseId": null,
+      "refNumber": "RDN-DEMO-0042",
+      "raisedBy": "Site PM (fictional)",
+      "responseDue": "2026-09-10",
+      "blockedReason": "",
+      "doneDate": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "",
+      "createdAt": "2026-09-01T08:00:00.000Z",
+      "updatedAt": "2026-09-07T20:54:23.000Z"
     }
   ]
 }
