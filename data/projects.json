@@ -1,6 +1,6 @@
 {
   "version": 2.1,
-  "updatedAt": "2026-09-08T08:39:05.836Z",
+  "updatedAt": "2026-09-08T08:44:05.769Z",
   "settings": {
     "taskStatuses": [
       {
@@ -42,17 +42,24 @@
     ],
     "myAssignee": "",
     "projectTypes": [
-      "PV GM (SteelCore)",
-      "Rooftop ballast",
+      "Carport",
+      "GM",
       "SAT",
-      "Carport"
+      "Rooftop",
+      "Custom"
     ],
     "structureTypes": [
-      "PV GM (SteelCore)",
-      "Rooftop ballast",
+      "Carport H-Max",
+      "Carport Alu-Max",
+      "Carport Econo-Max",
+      "Carport Ergo-Max",
+      "Carport Ergo+",
+      "GM Steel",
+      "GM Alu",
       "SAT tracker",
-      "Carport",
-      "Ground mount other"
+      "Rooftop ballast",
+      "Rooftop flush mount",
+      "Custom"
     ],
     "engineerDefaults": {
       "name": "Demo Pr. Eng. (SAMPLE)",
