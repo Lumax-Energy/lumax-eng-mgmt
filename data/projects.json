@@ -1,6 +1,6 @@
 {
   "version": 2.2,
-  "updatedAt": "2026-09-08T09:48:02.091Z",
+  "updatedAt": "2026-09-08T09:53:31.603Z",
   "settings": {
     "taskStatuses": [
       {
@@ -274,13 +274,13 @@
     {
       "id": "proj-sample-mid-design",
       "clientName": "SAMPLE Client Gamma",
-      "projectName": "SAMPLE â Mid-design SAT Array",
+      "projectName": "SAMPLE Mid-design SAT Array",
       "projectCode": "DEMO-MID-SAT",
       "salesOrderNumber": "SO-DEMO-2003",
       "poNumber": "",
       "popReference": "POP-DEMO-112",
       "invoiceNumber": "INV-DEMO-555",
-      "address": "",
+      "address": "50 street, Centurion",
       "contactPerson": "Riley Site Â· +27 71 000 0003",
       "projectType": "SAT",
       "structureTypes": [
@@ -340,7 +340,7 @@
       "activePhaseId": null,
       "archived": false,
       "createdAt": "2026-08-10T08:00:00.000Z",
-      "updatedAt": "2026-09-08T07:00:00.000Z"
+      "updatedAt": "2026-09-08T09:52:47.566Z"
     },
     {
       "id": "proj-sample-archived-scf",
@@ -596,13 +596,13 @@
       "title": "SAMPLE site investigation walkdown",
       "description": "Fictional site investigation.",
       "type": "eng_task",
-      "statusId": "status-todo",
+      "statusId": "status-done",
       "assignee": "Sam Drafter",
       "priority": "medium",
       "dueDate": "2026-09-25",
       "phaseId": "mid-phase-site-investigation",
       "blockedReason": "",
-      "doneDate": null,
+      "doneDate": "2026-09-08",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -612,7 +612,7 @@
       "rev": "",
       "discipline": "Civil",
       "createdAt": "2026-08-12T08:00:00.000Z",
-      "updatedAt": "2026-09-08T07:00:00.000Z"
+      "updatedAt": "2026-09-08T09:52:17.331Z"
     },
     {
       "id": "task-mid-2",
@@ -620,13 +620,13 @@
       "title": "SAMPLE tracker GA drawing",
       "description": "Fictional drawing task.",
       "type": "drawing",
-      "statusId": "status-doing",
+      "statusId": "status-done",
       "assignee": "Sam Drafter",
       "priority": "high",
       "dueDate": "2026-09-22",
       "phaseId": "mid-phase-drawings",
       "blockedReason": "",
-      "doneDate": null,
+      "doneDate": "2026-09-08",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -636,7 +636,7 @@
       "rev": "A",
       "discipline": "",
       "createdAt": "2026-08-15T08:00:00.000Z",
-      "updatedAt": "2026-09-08T07:00:00.000Z"
+      "updatedAt": "2026-09-08T09:52:16.160Z"
     },
     {
       "id": "task-arch-1",
@@ -781,6 +781,30 @@
       "discipline": "",
       "createdAt": "2026-09-01T08:00:00.000Z",
       "updatedAt": "2026-09-07T20:54:23.000Z"
+    },
+    {
+      "id": "task-3d7vr6sdq0xy",
+      "projectId": "proj-sample-mid-design",
+      "title": "haha",
+      "description": "",
+      "type": "eng_task",
+      "statusId": "status-done",
+      "assignee": "piet",
+      "priority": "medium",
+      "dueDate": null,
+      "phaseId": "mid-phase-intake",
+      "blockedReason": "",
+      "doneDate": "2026-09-09",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "",
+      "createdAt": "2026-09-08T09:51:58.534Z",
+      "updatedAt": "2026-09-08T09:52:18.593Z"
     }
   ]
 }
