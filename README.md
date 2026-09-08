@@ -1,8 +1,8 @@
-# Lumax Energy — Engineering Management (v2.1)
+# Lumax Energy — Engineering Management (v2.2)
 
 Single-page static app for engineering project & task tracking. No build step. Works on **GitHub Pages** or any static host.
 
-**v2.1** adds commercial fields (PO / POP / INV / address / contact / project type), terminal **Done** phase, **Structural Compliance Form (SCF)** issue + printable HTML preview (`LMX-SCF-YYYY-NNN`), richer dashboard chips, and Excel Projects + SCF sheets. GitHub Load/Save JSON sync is preserved (null-safe `wire()` from #3).
+**v2.2** UX pass: Dashboard labels (Engineer / Structure type / Municipal sign-off / Conformance letter / SCL), **Create SC Letter** Word (.docx) download (`LMX-SCL-YYYY-NNN`), Tasks structure-type filter, phase drag-and-drop, Excel navy header polish. Preserves GitHub Load/Save JSON sync (null-safe `wire()` from #3). Legacy `LMX-SCF-*` refs remain readable.
 
 ## Go live (5 steps)
 
@@ -18,9 +18,10 @@ For host ranking and concrete Cloudflare / Render / Pages steps, see **[DEPLOY.m
 
 | Path | Purpose |
 |------|---------|
-| `index.html` | App shell (nav + SheetJS CDN) |
+| `index.html` | App shell (nav + vendor SheetJS style + JSZip) |
 | `styles.css` | UI styles (ClickUp-ish navy Lumax) |
 | `app.js` | App logic (vanilla JS) |
+| `vendor/` | `xlsx-js-style` + `jszip` (offline-friendly) |
 | `data/projects.json` | Shared data (synced via GitHub API) |
 | `DEPLOY.md` | Go-live host ranking + Cloudflare / Render / Pages steps |
 
@@ -34,30 +35,34 @@ Intake · Concept · Design · Check · Drawings · Site investigation · Site/C
 
 **Current phase** = first phase with open tasks; if none, `activePhaseId` when set; else **Done** when present and (no tasks / all done); else last phase (never Intake by default).
 
-### Commercial / SCF project fields
+Drag task cards onto **phase tabs** to change `phaseId`, or onto status columns to change status.
+
+### Commercial / SCL project fields
 
 | Field | Notes |
 |-------|--------|
 | `poNumber` | Purchase order |
 | `popReference` | POP reference |
-| `invoiceNumber` | INV — required to issue SCF |
-| `address` | Site / project address — required to issue |
-| `contactPerson` | Required to issue |
+| `invoiceNumber` | INV — required to create SC Letter |
+| `address` | Site / project address — required |
+| `contactPerson` | Required |
 | `projectType` | Selectable list (Settings) + free text |
-| `structureTypes[]` | Multi-select from Settings list |
-| `engineeringSignOff` | Eng sign-off flag + at/by |
+| `structureTypes[]` | Multi-select from Settings list (Tasks filter + Structure type chip) |
+| `engineeringSignOff` | Displayed as **Municipal sign-off** (+ at/by) |
 | `conformanceStatus` | `none` \| `pending` \| `approved` |
-| `conformanceRef` | `LMX-SCF-YYYY-NNN` (never bare `008`) |
+| `conformanceRef` | `LMX-SCL-YYYY-NNN` (legacy `LMX-SCF-*` still shown) |
 | `conformanceIssuedAt` | ISO timestamp |
-| `conformanceCert` | Snapshot at issue (for stable print preview) |
+| `conformanceCert` | Snapshot at issue (for stable print / Word export) |
 
-**Issue conformance** (project detail): enabled only when INV + contact + address are set **and** current phase name is **Done** (case-insensitive). Allocates next ref from `settings.scfYear` / `settings.scfSeq`, sets status approved, opens printable HTML SCF preview. Blocked state shows a checklist; missing fields are listed in a toast via **Missing fields…** / issue attempt.
+**Create SC Letter** (project detail): enabled only when INV + contact + address are set **and** current phase name is **Done** (case-insensitive). `sclGate(project)` recomputes on every detail render (including after project form Save). Allocates next ref from `settings.scfYear` / `settings.scfSeq`, sets status approved, downloads a Word `.docx` matching the Structural Compliance Form layout. Checklist + toast list blockers when disabled.
 
 Engineer block defaults live in `settings.engineerDefaults` (editable in Settings) — SAMPLE uses fictional values only.
 
 ### Dashboard view chips
 
-Clients · Assignees · By project type · Eng sign-off · Has conformance · **SCF ready** · **SCF issued** · **Commercial gaps** · **Missing PO/POP/INV** · Missing INV · Missing address · Site investigation
+Clients · **Engineer** · **Structure type** · **Municipal sign-off** · **Conformance letter** · **SCL ready** · **SCL issued** · **Commercial gaps** · **Missing PO/POP/INV** · **Pending site investigation**
+
+(Removed: Missing INV, Missing address.)
 
 ### Task types
 
@@ -68,25 +73,27 @@ Clients · Assignees · By project type · Eng sign-off · Has conformance · **
 | `drawing` | Drawing | Drawing #, rev |
 | `eng_task` | Eng task | Discipline |
 
+Tasks view includes a **Structure type** dropdown (project `structureTypes` / task override).
+
 ### Excel export
 
-Workbook sheets (header freeze + autofilter):
+Workbook sheets with shared navy header helper (`#0B1F3A`, white bold, freeze, autofilter, thin borders, approx widths):
 
-1. Dashboard · 2. All Tasks · 3. **Projects** (PO/POP/INV/Address/Contact/Type/Conformance ref) · 4. **SCF** · 5. By Assignee · 6. By Client · 7. By Project · 8. RDN · 9. Design Checks · 10. Drawings · 11. Eng Tasks · 12. Summary
+1. Dashboard (title row) · 2. All Tasks · 3. **Projects** · 4. **SCL** · 5. By Assignee · 6. By Client · 7. By Project · 8. RDN · 9. Design Checks · 10. Drawings · 11. Eng Tasks · 12. Summary
 
-UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCF / Summary / By-* use the full dataset.
+UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCL / Summary / By-* use the full dataset.
 
 ## Multi-engineer sync
 
 - **Load** — `GET` `data/projects.json` (reads SHA).
 - **Save** — `PUT` with current SHA. Conflicts show toast with **Load & retry** (does not silently overwrite).
 - PAT stored **only in localStorage** — never in `projects.json`.
-- `normalizeData()` upgrades older payloads (adds Done phase, commercial fields, SCF settings).
+- `normalizeData()` upgrades older payloads (adds Done phase, commercial fields, SCL settings keys `scfYear`/`scfSeq`).
 - `wire()` is null-safe for missing header buttons (preserves #3 fix).
 
 ## Sample data
 
-`data/projects.json` ships with **≥4 clearly labeled SAMPLE** projects (fictional Demo clients / DEMO-* codes), multiple assignees, ≥2 in Site investigation, varied types (PV GM SteelCore, Rooftop ballast, SAT, Carport), mixed task types, one project **ready to issue** (INV+contact+address+Done), and one **already issued** as `LMX-SCF-2026-001`. Safe to edit or delete after onboarding.
+`data/projects.json` ships with **≥4 clearly labeled SAMPLE** projects (fictional Demo clients / DEMO-* codes), multiple assignees, ≥2 in Site investigation, varied types (PV GM SteelCore, Rooftop ballast, SAT, Carport), mixed task types, one project **ready to create** (INV+contact+address+Done), and one **already issued** (may show legacy `LMX-SCF-2026-001`). Safe to edit or delete after onboarding.
 
 ## Security reminders
 

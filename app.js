@@ -1,6 +1,6 @@
 /**
- * Lumax Energy — Engineering Management v2.1
- * Vanilla JS SPA: Dashboard · Projects · Tasks + SCF conformance + GitHub sync + Excel.
+ * Lumax Energy — Engineering Management v2.2
+ * Vanilla JS SPA: Dashboard · Projects · Tasks + SCL conformance + GitHub sync + Excel.
  */
 (function () {
   "use strict";
@@ -11,7 +11,7 @@
   const DEFAULT_OWNER = "Lumax-Energy";
   const DEFAULT_REPO = "lumax-eng-mgmt";
   const DATA_PATH = "data/projects.json";
-  const APP_VERSION = 2.1;
+  const APP_VERSION = 2.2;
 
   const DEFAULT_PHASES = [
     { id: "phase-intake", name: "Intake" },
@@ -35,39 +35,39 @@
     },
     {
       id: "assignees",
-      label: "Engineering assignees",
+      label: "Engineer",
       kind: "browse-assignees",
       hint: "Unique assignees from all tasks",
     },
     {
       id: "project-types",
-      label: "By project type",
-      kind: "browse-project-types",
-      hint: "Browse projects by project / structure type",
+      label: "Structure type",
+      kind: "browse-structure-types",
+      hint: "Browse projects by structure type",
     },
     {
       id: "eng-signoff",
-      label: "Eng sign-off",
+      label: "Municipal sign-off",
       kind: "filter-projects",
-      hint: "Projects with engineering sign-off",
+      hint: "Projects with municipal / engineering sign-off",
     },
     {
       id: "conformance",
-      label: "Has conformance",
+      label: "Conformance letter",
       kind: "filter-projects",
       hint: "Pending or approved (not none)",
     },
     {
       id: "scf-ready",
-      label: "SCF ready",
+      label: "SCL ready",
       kind: "filter-projects",
-      hint: "INV + contact + address + Done phase — ready to issue",
+      hint: "INV + contact + address + Done phase — ready to create SC Letter",
     },
     {
       id: "scf-issued",
-      label: "SCF issued",
+      label: "SCL issued",
       kind: "filter-projects",
-      hint: "Conformance approved with LMX-SCF ref",
+      hint: "Conformance approved with LMX-SCL / LMX-SCF ref",
     },
     {
       id: "commercial-gaps",
@@ -82,20 +82,8 @@
       hint: "Missing PO number, POP reference, or invoice number",
     },
     {
-      id: "missing-inv",
-      label: "Missing INV",
-      kind: "filter-projects",
-      hint: "No invoice number",
-    },
-    {
-      id: "missing-address",
-      label: "Missing address",
-      kind: "filter-projects",
-      hint: "No site / project address",
-    },
-    {
       id: "site-investigation",
-      label: "Site investigation",
+      label: "Pending site investigation",
       kind: "filter-projects",
       hint: "Active / current phase is Site investigation",
     },
@@ -159,7 +147,7 @@
     selectedPhaseId: "all",
     showArchived: false,
     search: "",
-    taskFilters: { type: "", statusId: "", assignee: "", overdueOnly: false, projectId: "", client: "" },
+    taskFilters: { type: "", statusId: "", assignee: "", overdueOnly: false, projectId: "", client: "", structureType: "" },
     projectFilters: { client: "", dashboardView: null },
     dashboardView: null, // id from DASHBOARD_VIEWS, or null
     tasksMode: "list", // list | board
@@ -354,6 +342,19 @@
         const p = t.projectId ? getProject(t.projectId) : null;
         if (!p || (p.clientName || "").toLowerCase() !== f.client.toLowerCase()) return false;
       }
+      if (f.structureType) {
+        const want = String(f.structureType).toLowerCase();
+        const taskStructs = [];
+        if (t.structureType) taskStructs.push(String(t.structureType));
+        if (Array.isArray(t.structureTypes)) taskStructs.push.apply(taskStructs, t.structureTypes);
+        if (taskStructs.length) {
+          if (!taskStructs.some((s) => String(s).toLowerCase() === want)) return false;
+        } else {
+          const p = t.projectId ? getProject(t.projectId) : null;
+          const structs = (p && p.structureTypes) || [];
+          if (!structs.some((s) => String(s).toLowerCase() === want)) return false;
+        }
+      }
       if (f.overdueOnly && !isOverdue(t)) return false;
       if (q) {
         const p = t.projectId ? getProject(t.projectId) : null;
@@ -498,8 +499,12 @@
     if (!projectInDonePhase(project)) missing.push("Done phase (current phase must be Done)");
     return missing;
   }
+  /** Fresh gate checklist — always recompute from live project fields (no stale closure). */
+  function sclGate(project) {
+    return scfIssueBlockers(project);
+  }
   function canIssueConformance(project) {
-    return !!project && scfIssueBlockers(project).length === 0 && normalizeConformanceStatus(project.conformanceStatus) !== "approved";
+    return !!project && sclGate(project).length === 0 && normalizeConformanceStatus(project.conformanceStatus) !== "approved";
   }
   function isScfIssued(project) {
     return (
@@ -511,13 +516,13 @@
   function isScfReady(project) {
     return !!project && scfIssueBlockers(project).length === 0 && !isScfIssued(project);
   }
-  /** SCF / Structural Compliance Form helpers (static). */
+  /** SCL / Structural Compliance Letter helpers (static). Internal settings keys remain scfYear/scfSeq. */
   class ScfHelper {
     static formatRef(year, seq) {
       const y = Number(year) || new Date().getFullYear();
       const n = Number(seq);
       const s = !Number.isFinite(n) || n < 1 ? 1 : Math.floor(n);
-      return "LMX-SCF-" + y + "-" + String(s).padStart(3, "0");
+      return "LMX-SCL-" + y + "-" + String(s).padStart(3, "0");
     }
     static issueDateParts(d) {
       const dt = d instanceof Date ? d : new Date(d || Date.now());
@@ -543,7 +548,7 @@
       return { ref, year, seq, issuedAt: parts.iso, dateLabel: parts.dateLabel };
     }
     static blockers(project) {
-      return scfIssueBlockers(project);
+      return sclGate(project);
     }
     static canIssue(project) {
       return canIssueConformance(project);
@@ -621,6 +626,27 @@
     const settings = state.data.settings || (state.data.settings = {});
     return ScfHelper.allocateRef(settings, new Date()).ref;
   }
+  /** Display refs as-is (legacy LMX-SCF-* remain readable). */
+  function displayConformanceRef(ref) {
+    return (ref || "").trim();
+  }
+  function uniqueStructureTypes() {
+    const set = new Set(getStructureTypes());
+    (state.data.projects || []).forEach((p) => {
+      (p.structureTypes || []).forEach((s) => {
+        const t = String(s || "").trim();
+        if (t) set.add(t);
+      });
+    });
+    (state.data.tasks || []).forEach((t) => {
+      if (t.structureType) set.add(String(t.structureType).trim());
+      (t.structureTypes || []).forEach((s) => {
+        const x = String(s || "").trim();
+        if (x) set.add(x);
+      });
+    });
+    return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }
   function uniqueProjectTypes() {
     const set = new Set(getProjectTypes());
     (state.data.projects || []).forEach((p) => {
@@ -671,19 +697,13 @@
       projects = projects.filter((p) => missingCommercialFields(p).length > 0);
     } else if (viewId === "missing-po-pop-inv") {
       projects = projects.filter((p) => missingPoPopInv(p).length > 0);
-    } else if (viewId === "missing-inv") {
-      projects = projects.filter((p) => !(p.invoiceNumber || "").trim());
-    } else if (viewId === "missing-address") {
-      projects = projects.filter((p) => !(p.address || "").trim());
     } else if (viewId === "site-investigation") {
       projects = projects.filter((p) => projectInSiteInvestigation(p));
     } else if (viewId && String(viewId).startsWith("type:")) {
       const want = String(viewId).slice(5).toLowerCase();
-      projects = projects.filter((p) => {
-        const pt = (p.projectType || "").toLowerCase();
-        if (pt === want) return true;
-        return (p.structureTypes || []).some((s) => String(s).toLowerCase() === want);
-      });
+      projects = projects.filter((p) =>
+        (p.structureTypes || []).some((s) => String(s).toLowerCase() === want)
+      );
     }
     if (q) {
       projects = projects.filter((p) => {
@@ -1162,6 +1182,7 @@
         state.taskFilters.overdueOnly ||
         state.taskFilters.projectId ||
         state.taskFilters.client ||
+        state.taskFilters.structureType ||
         (state.search || "").trim())
     );
     const filteredTasks = filterActive ? allTasksFiltered() : allTasks.slice();
@@ -1212,14 +1233,82 @@
       const headers = fallbackHeaders || ["(empty)"];
       return XLSX.utils.aoa_to_sheet([headers]);
     }
-    function freezeAndFilter(ws) {
-      if (!ws["!ref"]) return;
-      ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" };
-      // SheetJS uses !autofilter
-      ws["!autofilter"] = { ref: ws["!ref"] };
+    /** Shared navy header + freeze/autofilter/borders/widths (Researchy polish). */
+    function applyNavyHeader(ws, opts) {
+      opts = opts || {};
+      if (!ws || !ws["!ref"]) return ws;
+      const range = XLSX.utils.decode_range(ws["!ref"]);
+      const headerRow = opts.headerRow != null ? opts.headerRow : 0;
+      const titleRows = opts.titleRows || 0;
+      const navy = "0B1F3A";
+      const borderColor = "CCCCCC";
+      const zebra = "F5F7FA";
+      const thin = { style: "thin", color: { rgb: borderColor } };
+      const border = { top: thin, bottom: thin, left: thin, right: thin };
+      const colMax = {};
+      for (let R = range.s.r; R <= range.e.r; R++) {
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          let cell = ws[addr];
+          if (!cell) {
+            cell = { t: "s", v: "" };
+            ws[addr] = cell;
+          }
+          if (cell.v == null) cell.v = "";
+          const str = String(cell.v);
+          colMax[C] = Math.max(colMax[C] || 0, Math.min(str.length, 40));
+          const isHeader = R === headerRow;
+          const isTitle = R < headerRow && R < titleRows;
+          const base = cell.s && typeof cell.s === "object" ? Object.assign({}, cell.s) : {};
+          if (isHeader) {
+            cell.s = Object.assign({}, base, {
+              fill: { patternType: "solid", fgColor: { rgb: navy } },
+              font: { bold: true, color: { rgb: "FFFFFF" }, name: "Calibri", sz: 11 },
+              alignment: { wrapText: true, vertical: "center", horizontal: "left" },
+              border: border,
+            });
+          } else if (isTitle) {
+            cell.s = Object.assign({}, base, {
+              font: { bold: true, color: { rgb: navy }, name: "Calibri", sz: R === 0 ? 14 : 11 },
+              alignment: { wrapText: true, vertical: "center" },
+            });
+          } else {
+            const zebraFill = opts.zebra !== false && R > headerRow && (R - headerRow) % 2 === 0;
+            cell.s = Object.assign({}, base, {
+              font: { name: "Calibri", sz: 11, color: { rgb: "1A2332" } },
+              alignment: { wrapText: true, vertical: "top" },
+              border: border,
+              fill: zebraFill ? { patternType: "solid", fgColor: { rgb: zebra } } : base.fill,
+            });
+          }
+        }
+      }
+      const freezeAt = headerRow + 1;
+      ws["!freeze"] = {
+        xSplit: 0,
+        ySplit: freezeAt,
+        topLeftCell: XLSX.utils.encode_cell({ r: freezeAt, c: 0 }),
+        activePane: "bottomLeft",
+        state: "frozen",
+      };
+      // Autofilter on header..data (skip pure title-only sheets without header)
+      if (range.e.r >= headerRow) {
+        const af = {
+          s: { r: headerRow, c: range.s.c },
+          e: { r: range.e.r, c: range.e.c },
+        };
+        ws["!autofilter"] = { ref: XLSX.utils.encode_range(af) };
+      }
+      const cols = [];
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const w = Math.max(10, Math.min(42, (colMax[C] || 8) + 2));
+        cols.push({ wch: w });
+      }
+      ws["!cols"] = cols;
+      return ws;
     }
-    function appendSheet(wb, name, ws) {
-      freezeAndFilter(ws);
+    function appendSheet(wb, name, ws, polishOpts) {
+      applyNavyHeader(ws, polishOpts || {});
       XLSX.utils.book_append_sheet(wb, ws, name);
     }
 
@@ -1233,7 +1322,7 @@
     const riskProjects = activeProjects.filter((p) => projectAtRisk(p));
 
     const dash = [];
-    dash.push(["Lumax Eng Mgmt — Dashboard export"]);
+    dash.push(["Lumax Energy — Engineering Management — Dashboard"]);
     dash.push(["Exported at", nowIso()]);
     dash.push(["Filter note", filterActive
       ? "Active UI filters apply to All Tasks + type sheets only. This Dashboard sheet is the FULL dataset."
@@ -1346,9 +1435,9 @@
           "Structure types": (p.structureTypes || []).join("; "),
           "Phase count": (p.phases || []).length,
           "Current phase": cur ? cur.name : "",
-          "Eng sign-off": p.engineeringSignOff ? "yes" : "no",
-          "Eng sign-off at": p.engineeringSignOffAt || "",
-          "Eng sign-off by": p.engineeringSignOffBy || "",
+          "Municipal sign-off": p.engineeringSignOff ? "yes" : "no",
+          "Municipal sign-off at": p.engineeringSignOffAt || "",
+          "Municipal sign-off by": p.engineeringSignOffBy || "",
           Conformance: conformanceLabel(p.conformanceStatus),
           "Conformance ref": p.conformanceRef || "",
           "Conformance issued at": p.conformanceIssuedAt || "",
@@ -1480,12 +1569,21 @@
       });
 
     const wb = XLSX.utils.book_new();
-    // 1 Dashboard 2 All Tasks 3 Projects 4 SCF 5 By Assignee 6 By Client 7 By Project
+    // 1 Dashboard 2 All Tasks 3 Projects 4 SCL 5 By Assignee 6 By Client 7 By Project
     // 8 RDN 9 Design Checks 10 Drawings 11 Eng Tasks 12 Summary
-    appendSheet(wb, "Dashboard", XLSX.utils.aoa_to_sheet(dash));
+    // Dashboard: title row 0, KPI header around row with "KPI","Value" — find first header-ish row
+    const dashWs = XLSX.utils.aoa_to_sheet(dash);
+    let dashHeaderRow = 0;
+    for (let i = 0; i < dash.length; i++) {
+      if (dash[i] && dash[i][0] === "KPI" && dash[i][1] === "Value") {
+        dashHeaderRow = i;
+        break;
+      }
+    }
+    appendSheet(wb, "Dashboard", dashWs, { headerRow: dashHeaderRow, titleRows: Math.min(3, dashHeaderRow), zebra: false });
     appendSheet(wb, "All Tasks", sheetFromRows(allTaskRows, emptyHeaders));
     appendSheet(wb, "Projects", sheetFromRows(projRows, ["Code", "Name", "Client", "PO number", "INV", "Conformance ref"]));
-    appendSheet(wb, "SCF", sheetFromRows(scfRows, ["Conformance ref", "Status", "Client", "INV"]));
+    appendSheet(wb, "SCL", sheetFromRows(scfRows, ["Conformance ref", "Status", "Client", "INV"]));
     appendSheet(wb, "By Assignee", sheetFromRows(byAssigneeRows, emptyHeaders));
     appendSheet(wb, "By Client", sheetFromRows(byClientRows, emptyHeaders));
     appendSheet(wb, "By Project", sheetFromRows(byProjectRows, emptyHeaders));
@@ -1493,12 +1591,20 @@
     appendSheet(wb, "Design Checks", sheetFromRows(typeRows("design_check"), emptyHeaders));
     appendSheet(wb, "Drawings", sheetFromRows(typeRows("drawing"), emptyHeaders));
     appendSheet(wb, "Eng Tasks", sheetFromRows(typeRows("eng_task"), emptyHeaders));
-    appendSheet(wb, "Summary", XLSX.utils.aoa_to_sheet(summary));
+    const summaryWs = XLSX.utils.aoa_to_sheet(summary);
+    let sumHeader = 0;
+    for (let i = 0; i < summary.length; i++) {
+      if (summary[i] && String(summary[i][0] || "").indexOf("Type") === 0) {
+        sumHeader = i;
+        break;
+      }
+    }
+    appendSheet(wb, "Summary", summaryWs, { headerRow: sumHeader, titleRows: Math.min(3, sumHeader), zebra: false });
 
     XLSX.writeFile(wb, "lumax-eng-mgmt.xlsx");
     toast(
       filterActive
-        ? "Exported Excel (All Tasks + type sheets filter-scoped; Dashboard/Projects/SCF/Summary/By-* full)"
+        ? "Exported Excel (All Tasks + type sheets filter-scoped; Dashboard/Projects/SCL/Summary/By-* full)"
         : "Exported Excel workbook (12 sheets)",
       "success"
     );
@@ -1646,7 +1752,7 @@
       root.innerHTML =
         renderViewChips(state.dashboardView) +
         `<div class="dash-view-panel">` +
-        `<h2>Engineering assignees <span class="stat-sub">(${assignees.length})</span></h2>` +
+        `<h2>Engineer <span class="stat-sub">(${assignees.length})</span></h2>` +
         `<p class="hint">Click an assignee to open Tasks filtered by that person.</p>` +
         `<div class="browse-chip-grid">` +
         (assignees.length
@@ -1675,6 +1781,7 @@
             overdueOnly: false,
             projectId: "",
             client: "",
+            structureType: "",
           };
           state.dashboardView = null;
           setView("tasks");
@@ -1683,20 +1790,19 @@
       return;
     }
 
-    if (viewDef && viewDef.kind === "browse-project-types") {
-      const types = uniqueProjectTypes();
+    if (viewDef && (viewDef.kind === "browse-structure-types" || viewDef.kind === "browse-project-types")) {
+      const types = uniqueStructureTypes();
       root.innerHTML =
         renderViewChips(state.dashboardView) +
         `<div class="dash-view-panel">` +
-        `<h2>By project / structure type <span class="stat-sub">(${types.length})</span></h2>` +
-        `<p class="hint">Click a type to list matching projects (projectType or structureTypes).</p>` +
+        `<h2>Structure type <span class="stat-sub">(${types.length})</span></h2>` +
+        `<p class="hint">Click a structure type to list matching projects (filtered by structureTypes).</p>` +
         `<div class="browse-chip-grid">` +
         (types.length
           ? types
               .map((t) => {
                 const n = (state.data.projects || []).filter((p) => {
                   if (p.archived) return false;
-                  if ((p.projectType || "") === t) return true;
                   return (p.structureTypes || []).includes(t);
                 }).length;
                 return (
@@ -1707,7 +1813,7 @@
                 );
               })
               .join("")
-          : `<div class="empty-state">No project types yet — add some in Settings</div>`) +
+          : `<div class="empty-state">No structure types yet — add some in Settings</div>`) +
         `</div></div>`;
       bindViewChips(root);
       root.querySelectorAll("[data-ptype]").forEach((btn) => {
@@ -1773,13 +1879,13 @@
         `<h2>${escapeHtml(viewDef.label)} <span class="stat-sub">(${projects.length})</span></h2>` +
         `<p class="hint">${escapeHtml(viewDef.hint || "")}` +
         (viewDef.id === "conformance"
-          ? ' — <em>Has conformance</em> means status is <strong>pending</strong> or <strong>approved</strong> (not none).'
+          ? ' — <em>Conformance letter</em> means status is <strong>pending</strong> or <strong>approved</strong> (not none).'
           : "") +
         (viewDef.id === "scf-ready"
           ? " — Requires invoice, contact, address, and current phase <strong>Done</strong>."
           : "") +
         (viewDef.id === "scf-issued"
-          ? " — Approved with an <strong>LMX-SCF-YYYY-NNN</strong> reference."
+          ? " — Approved with an <strong>LMX-SCL-YYYY-NNN</strong> reference (legacy LMX-SCF-* still shown)."
           : "") +
         (viewDef.id === "site-investigation"
           ? " — Current phase = first phase with open tasks; if all tasks done, terminal phase."
@@ -1800,7 +1906,7 @@
               `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
               `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
               `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}</div>` +
-              (p.engineeringSignOff ? '<span class="pill signoff">Eng sign-off</span> ' : "") +
+              (p.engineeringSignOff ? '<span class="pill signoff">Municipal sign-off</span> ' : "") +
               (hasConformance(p) ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span> ` : "") +
               (cur ? `<div class="stat-sub">Current: ${escapeHtml(cur.name)}</div>` : "") +
               `</article>`
@@ -1885,7 +1991,7 @@
       `<div class="dash-grid">` +
       `<div class="dash-card span-3"><h3>Open tasks</h3><div class="stat-big">${open.length}</div><div class="stat-sub">${overdue.length} overdue · ${due7.length} due in 7d</div></div>` +
       `<div class="dash-card span-3"><h3>Standalone</h3><div class="stat-big">${tasks.filter((t) => !t.projectId && statusIsOpen(t.statusId)).length}</div><div class="stat-sub">open without project</div></div>` +
-      `<div class="dash-card span-3"><h3>SCF</h3><div class="stat-big">${scfReadyN}</div><div class="stat-sub">${scfIssuedN} issued · ${gapN} commercial gaps · ${confN} conformance</div></div>` +
+      `<div class="dash-card span-3"><h3>SCL</h3><div class="stat-big">${scfReadyN}</div><div class="stat-sub">${scfIssuedN} issued · ${gapN} commercial gaps · ${confN} conformance</div></div>` +
       `<div class="dash-card span-3"><h3>Active projects</h3><div class="stat-big">${(state.data.projects || []).filter((p) => !p.archived).length}</div><div class="stat-sub">${risk.length} at risk · ${signOffN} sign-off · ${siteN} site inv.</div></div>` +
       `<div class="dash-card span-6"><h3>Open by status</h3><div class="status-bars">` +
       byStatus
@@ -2012,7 +2118,7 @@
         ? `<span class="view-chip-meta">Client: <strong>${escapeHtml(state.projectFilters.client)}</strong></span>`
         : "") +
       (activeId === "conformance"
-        ? `<span class="view-chip-meta hint-inline">Has conformance = pending | approved</span>`
+        ? `<span class="view-chip-meta hint-inline">Conformance letter = pending | approved</span>`
         : "") +
       (activeId && String(activeId).startsWith("type:")
         ? `<span class="view-chip-meta">Type: <strong>${escapeHtml(String(activeId).slice(5))}</strong></span>`
@@ -2080,13 +2186,13 @@
           `</div>` +
           (isSample(p) ? '<span class="sample-tag">SAMPLE</span>' : "") +
           (p.archived ? '<span class="sample-tag" style="background:#eee;color:#555">ARCHIVED</span>' : "") +
-          (p.engineeringSignOff ? '<span class="pill signoff">Eng sign-off</span>' : "") +
+          (p.engineeringSignOff ? '<span class="pill signoff">Municipal sign-off</span>' : "") +
           (isScfIssued(p)
-            ? `<span class="pill conformance issued">${escapeHtml(p.conformanceRef || "SCF issued")}</span>`
+            ? `<span class="pill conformance issued">${escapeHtml(displayConformanceRef(p.conformanceRef) || "SCL issued")}</span>`
             : hasConformance(p)
               ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span>`
               : "") +
-          (isScfReady(p) ? '<span class="pill scf-ready">SCF ready</span>' : "") +
+          (isScfReady(p) ? '<span class="pill scf-ready">SCL ready</span>' : "") +
           (!(p.invoiceNumber || "").trim() ? '<span class="pill gap">No INV</span>' : "") +
           (!(p.address || "").trim() ? '<span class="pill gap">No address</span>' : "") +
           (cur ? `<div class="stat-sub">Phase: ${escapeHtml(cur.name)}` +
@@ -2150,7 +2256,7 @@
       (t) => state.selectedPhaseId === "all" || t.phaseId === state.selectedPhaseId
     );
 
-    const blockers = scfIssueBlockers(p);
+    const blockers = sclGate(p);
     const issued = isScfIssued(p);
     const issueEnabled = blockers.length === 0 && !issued;
 
@@ -2171,7 +2277,7 @@
         : "") +
       `<span><strong>Address:</strong> ${escapeHtml(p.address || "—")}</span>` +
       `<span><strong>Contact:</strong> ${escapeHtml(p.contactPerson || "—")}</span>` +
-      `<span><strong>Eng sign-off:</strong> ${p.engineeringSignOff ? "Yes" : "No"}` +
+      `<span><strong>Municipal sign-off:</strong> ${p.engineeringSignOff ? "Yes" : "No"}` +
       (p.engineeringSignOff && (p.engineeringSignOffBy || p.engineeringSignOffAt)
         ? ` (${escapeHtml([p.engineeringSignOffBy, p.engineeringSignOffAt].filter(Boolean).join(" · "))})`
         : "") +
@@ -2189,12 +2295,12 @@
       `<div class="drawings-list"><strong>Drawings:</strong> ${drawings}</div>` +
       (customs ? `<div class="custom-fields-list" style="margin-top:0.4rem">${customs}</div>` : "") +
       `<div class="scf-gate">` +
-      `<div class="scf-gate-title"><strong>Structural Compliance Form (SCF)</strong>` +
+      `<div class="scf-gate-title"><strong>Structural Compliance Letter (SCL)</strong>` +
       (issued
-        ? ` — issued <code>${escapeHtml(p.conformanceRef || "")}</code>`
+        ? ` — issued <code>${escapeHtml(displayConformanceRef(p.conformanceRef) || "")}</code>`
         : issueEnabled
-          ? " — ready to issue"
-          : " — Issue disabled until checklist is complete") +
+          ? " — ready to create"
+          : " — Create SC Letter disabled until checklist is complete") +
       `</div>` +
       (issued
         ? ""
@@ -2215,15 +2321,15 @@
       `<div class="detail-actions" style="margin-top:0.85rem">` +
       `<button type="button" class="btn btn-sm" id="btn-new-task">+ Task</button>` +
       `<button type="button" class="btn btn-secondary btn-sm" id="btn-edit-project">Edit project</button>` +
-      `<button type="button" class="btn btn-sm" id="btn-issue-scf"${issueEnabled ? "" : " disabled"} title="${escapeHtml(issueEnabled ? "Issue Structural Compliance Form (LMX-SCF-YYYY-NNN)" : blockers.length ? "Missing: " + blockers.join(", ") : "Already issued")}">Issue SCF</button>` +
+      `<button type="button" class="btn btn-sm" id="btn-issue-scf"${issueEnabled ? "" : " disabled"} title="${escapeHtml(issueEnabled ? "Create Structural Compliance Letter (LMX-SCL-YYYY-NNN)" : blockers.length ? "Missing: " + blockers.join(", ") : "Already issued")}">Create SC Letter</button>` +
       (issued || (p.conformanceCert && p.conformanceCert.ref)
-        ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-preview-scf">View / print SCF</button>`
+        ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-preview-scf">View / print SCL</button>`
         : issueEnabled
-          ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-preview-scf" title="Draft preview (not issued)">Preview draft SCF</button>`
+          ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-preview-scf" title="Draft preview (not issued)">Preview draft SCL</button>`
           : "") +
       `<button type="button" class="btn btn-secondary btn-sm" id="btn-archive">${p.archived ? "Unarchive" : "Archive"}</button>` +
       `</div></div>` +
-      `<div class="phase-tabs">${phaseTabs}</div>` +
+      `<div class="phase-tabs" id="phase-drop-targets">${phaseTabs}</div>` +
       `<div class="board" id="project-board"></div>`;
 
     renderBoard(document.getElementById("project-board"), filtered, p);
@@ -2250,6 +2356,7 @@
         renderDetail();
       });
     });
+    bindPhaseDropTargets(root, p);
   }
 
   function renderBoard(container, tasks, projectCtx) {
@@ -2263,7 +2370,7 @@
               projectCtx && (projectCtx.phases || []).find((ph) => ph.id === t.phaseId);
             const proj = t.projectId ? getProject(t.projectId) : null;
             return (
-              `<div class="task-card${isOverdue(t) ? " overdue" : ""}" data-task="${escapeHtml(t.id)}" tabindex="0" role="button">` +
+              `<div class="task-card${isOverdue(t) ? " overdue" : ""}" data-task="${escapeHtml(t.id)}" draggable="true" tabindex="0" role="button">` +
               `<div style="margin-bottom:0.25rem"><span class="type-chip">${escapeHtml(typeLabel(t.type))}</span></div>` +
               `<h4>${escapeHtml(t.title)}</h4>` +
               (t.description ? `<div class="desc">${escapeHtml(t.description)}</div>` : "") +
@@ -2279,7 +2386,7 @@
           })
           .join("");
         return (
-          `<div class="column">` +
+          `<div class="column status-drop" data-status="${escapeHtml(st.id)}">` +
           `<div class="column-header"><span class="dot" style="background:${escapeHtml(st.color || "#6b7c93")}"></span><span>${escapeHtml(st.name)}</span><span class="count">${colTasks.length}</span></div>` +
           (cards || '<div class="column-empty">No tasks</div>') +
           `</div>`
@@ -2295,6 +2402,65 @@
           openTaskForm(card.dataset.task);
         }
       });
+      card.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", card.dataset.task);
+        e.dataTransfer.effectAllowed = "move";
+        card.classList.add("dragging");
+      });
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+    });
+    container.querySelectorAll(".status-drop").forEach((col) => {
+      col.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        col.classList.add("drop-hover");
+      });
+      col.addEventListener("dragleave", () => col.classList.remove("drop-hover"));
+      col.addEventListener("drop", (e) => {
+        e.preventDefault();
+        col.classList.remove("drop-hover");
+        const taskId = e.dataTransfer.getData("text/plain");
+        const t = getTask(taskId);
+        const statusId = col.dataset.status;
+        if (!t || !statusId || t.statusId === statusId) return;
+        t.statusId = statusId;
+        if (statusIsDone(statusId) && !t.doneDate) t.doneDate = todayStr();
+        t.updatedAt = nowIso();
+        cacheDataLocally();
+        toast(localSaveHint("Moved to " + ((getStatus(statusId) || {}).name || statusId)), "success");
+        render();
+      });
+    });
+  }
+
+  function bindPhaseDropTargets(root, project) {
+    if (!project) return;
+    root.querySelectorAll(".phase-tab[data-phase]").forEach((tab) => {
+      const phaseId = tab.dataset.phase;
+      if (!phaseId || phaseId === "all") return;
+      tab.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        tab.classList.add("drop-hover");
+      });
+      tab.addEventListener("dragleave", () => tab.classList.remove("drop-hover"));
+      tab.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        tab.classList.remove("drop-hover");
+        const taskId = e.dataTransfer.getData("text/plain");
+        const t = getTask(taskId);
+        if (!t || t.projectId !== project.id) {
+          toast("Drop a task from this project onto a phase", "error");
+          return;
+        }
+        if (t.phaseId === phaseId) return;
+        t.phaseId = phaseId;
+        t.updatedAt = nowIso();
+        project.updatedAt = nowIso();
+        cacheDataLocally();
+        const ph = (project.phases || []).find((x) => x.id === phaseId);
+        toast(localSaveHint("Phase → " + ((ph && ph.name) || phaseId)), "success");
+        renderDetail();
+      });
     });
   }
 
@@ -2305,12 +2471,14 @@
     const assignees = [...new Set((state.data.tasks || []).map((t) => t.assignee).filter(Boolean))].sort();
     const f = state.taskFilters;
 
+    const structureTypes = uniqueStructureTypes();
     const filterBar =
       `<div class="filter-row">` +
       `<select id="tf-filter-type"><option value="">All types</option>${TASK_TYPES.map((ty) => `<option value="${ty.id}"${f.type === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`).join("")}</select>` +
       `<select id="tf-filter-status"><option value="">All statuses</option>${statuses.map((s) => `<option value="${s.id}"${f.statusId === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}</select>` +
       `<select id="tf-filter-assignee"><option value="">All assignees</option>${assignees.map((a) => `<option value="${escapeHtml(a)}"${f.assignee === a ? " selected" : ""}>${escapeHtml(a)}</option>`).join("")}</select>` +
       `<select id="tf-filter-project"><option value="">All projects</option><option value="__standalone__"${f.projectId === "__standalone__" ? " selected" : ""}>Standalone only</option>${(state.data.projects || []).map((p) => `<option value="${escapeHtml(p.id)}"${f.projectId === p.id ? " selected" : ""}>${escapeHtml(p.projectCode || p.projectName)}</option>`).join("")}</select>` +
+      `<select id="tf-filter-structure" title="Structure type"><option value="">All structure types</option>${structureTypes.map((s) => `<option value="${escapeHtml(s)}"${f.structureType === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select>` +
       `<label class="checkbox-label"><input type="checkbox" id="tf-filter-overdue"${f.overdueOnly ? " checked" : ""}/> Overdue</label>` +
       `<div class="spacer"></div>` +
       `<div class="view-toggle">` +
@@ -2367,10 +2535,12 @@
       state.taskFilters.statusId = document.getElementById("tf-filter-status").value;
       state.taskFilters.assignee = document.getElementById("tf-filter-assignee").value;
       state.taskFilters.projectId = document.getElementById("tf-filter-project").value;
+      const stEl = document.getElementById("tf-filter-structure");
+      state.taskFilters.structureType = stEl ? stEl.value : "";
       state.taskFilters.overdueOnly = document.getElementById("tf-filter-overdue").checked;
       renderTasksView();
     }
-    ["tf-filter-type", "tf-filter-status", "tf-filter-assignee", "tf-filter-project"].forEach((id) => {
+    ["tf-filter-type", "tf-filter-status", "tf-filter-assignee", "tf-filter-project", "tf-filter-structure"].forEach((id) => {
       document.getElementById(id).onchange = syncFilters;
     });
     document.getElementById("tf-filter-overdue").onchange = syncFilters;
@@ -2401,23 +2571,199 @@
     ov.onclick = null;
   }
 
+
+  function xmlEscape(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function wPara(text, opts) {
+    opts = opts || {};
+    const bold = opts.bold ? '<w:b/>' : '';
+    const sz = opts.sz ? '<w:sz w:val="' + opts.sz + '"/><w:szCs w:val="' + opts.sz + '"/>' : '';
+    const after = opts.after != null ? opts.after : 120;
+    return (
+      '<w:p><w:pPr><w:spacing w:after="' + after + '"/>' +
+      (opts.center ? '<w:jc w:val="center"/>' : '') +
+      '</w:pPr><w:r><w:rPr>' + bold + sz +
+      '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/></w:rPr><w:t xml:space="preserve">' +
+      xmlEscape(text) +
+      '</w:t></w:r></w:p>'
+    );
+  }
+  function wEmpty() {
+    return '<w:p><w:pPr><w:spacing w:after="60"/></w:pPr></w:p>';
+  }
+  function wTc(text, opts) {
+    opts = opts || {};
+    const width = opts.width || 2400;
+    const shade = opts.shade ? '<w:shd w:val="clear" w:fill="' + opts.shade + '"/>' : '';
+    const bold = opts.bold ? '<w:b/>' : '';
+    return (
+      '<w:tc><w:tcPr><w:tcW w:w="' + width + '" w:type="dxa"/>' + shade +
+      '<w:tcBorders>' +
+      '<w:top w:val="single" w:sz="4" w:color="333333"/>' +
+      '<w:left w:val="single" w:sz="4" w:color="333333"/>' +
+      '<w:bottom w:val="single" w:sz="4" w:color="333333"/>' +
+      '<w:right w:val="single" w:sz="4" w:color="333333"/>' +
+      '</w:tcBorders></w:tcPr>' +
+      '<w:p><w:pPr><w:spacing w:before="40" w:after="40"/></w:pPr>' +
+      '<w:r><w:rPr>' + bold +
+      '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="20"/></w:rPr>' +
+      '<w:t xml:space="preserve">' + xmlEscape(text == null || text === "" ? "—" : text) +
+      '</w:t></w:r></w:p></w:tc>'
+    );
+  }
+  function wRow(cells) {
+    return '<w:tr>' + cells.join("") + '</w:tr>';
+  }
+  function buildSclDocumentXml(project) {
+    const snap = project && project.conformanceCert;
+    const eng = (snap && snap.engineer) || getEngineerDefaults();
+    const drawings = ((snap && snap.drawingNumbers) || project.drawingNumbers || []).join(" + ") || "—";
+    const pType =
+      (snap && snap.projectType) ||
+      ((project.structureTypes || [])[0]) ||
+      project.projectType ||
+      "Photovoltaic Mounting system";
+    const ref = (snap && snap.ref) || project.conformanceRef || "LMX-SCL-DRAFT";
+    const issued =
+      (snap && snap.dateLabel) ||
+      (project.conformanceIssuedAt
+        ? ScfHelper.issueDateParts(project.conformanceIssuedAt).dateLabel
+        : ScfHelper.issueDateParts(new Date()).dateLabel);
+    const clientName = (snap && snap.clientName) || project.clientName || "—";
+    const projectName = (snap && snap.projectName) || project.projectName || "—";
+    const invoiceNumber = (snap && snap.invoiceNumber) || project.invoiceNumber || "—";
+    const address = (snap && snap.address) || project.address || "—";
+    const contactPerson = (snap && snap.contactPerson) || project.contactPerson || "—";
+    const intro =
+      "As a practising Structural Engineer and registered as a Professional Engineer Technologist under the provisions of the Engineering Profession Act, 2000 (Act No. 46 of 2000), I hereby certify that the Photovoltaic Mounting system (" +
+      pType +
+      ") analysed complies with the National Building Regulations, SANS 10400-Part B — Structural Design Building Regulations.";
+    const body =
+      wPara("Ref: " + ref + " ________________________________ " + issued, { bold: true, sz: 20 }) +
+      wPara("STRUCTURAL COMPLIANCE FORM:", { bold: true, sz: 28 }) +
+      wPara(intro, { sz: 20, after: 200 }) +
+      wPara("Project Details", { bold: true, sz: 24 }) +
+      '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>' +
+      wRow([wTc("Client Name", { bold: true, shade: "F4F6F8", width: 1800 }), wTc(clientName, { width: 2880 }), wTc("Invoice No.", { bold: true, shade: "F4F6F8", width: 1800 }), wTc(invoiceNumber, { width: 2880 })]) +
+      wRow([wTc("Project Name", { bold: true, shade: "F4F6F8", width: 1800 }), wTc(projectName, { width: 2880 }), wTc("Drawing No.", { bold: true, shade: "F4F6F8", width: 1800 }), wTc(drawings, { width: 2880 })]) +
+      wRow([wTc("Project Type", { bold: true, shade: "F4F6F8", width: 1800 }), wTc(pType, { width: 7560 })]) +
+      wRow([wTc("Address", { bold: true, shade: "F4F6F8", width: 1800 }), wTc(address, { width: 7560 })]) +
+      wRow([wTc("Contact Person", { bold: true, shade: "F4F6F8", width: 1800 }), wTc(contactPerson, { width: 7560 })]) +
+      '</w:tbl>' +
+      wEmpty() +
+      wPara("Practising Engineer Details", { bold: true, sz: 24 }) +
+      '<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>' +
+      wRow([wTc("Pr. Engineer", { bold: true, shade: "F4F6F8", width: 2400 }), wTc(eng.name || "—", { width: 6960 })]) +
+      wRow([wTc("ECSA No.", { bold: true, shade: "F4F6F8", width: 2400 }), wTc(eng.ecsaNo || "—", { width: 6960 })]) +
+      wRow([wTc("Business Name", { bold: true, shade: "F4F6F8", width: 2400 }), wTc(eng.business || "—", { width: 6960 })]) +
+      wRow([wTc("Business Address", { bold: true, shade: "F4F6F8", width: 2400 }), wTc(eng.address || "—", { width: 6960 })]) +
+      wRow([wTc("Contact Details", { bold: true, shade: "F4F6F8", width: 2400 }), wTc(eng.contact || "—", { width: 6960 })]) +
+      '</w:tbl>' +
+      wEmpty() +
+      wPara(
+        "We respectfully direct the client's attention to the stipulations outlined in Regulation 11(2) of the Construction Regulations 2014, which are derived from the Occupational Health & Safety Act No. 85 of 1993. This regulation mandates that any structure must undergo periodic inspection by competent individuals to ensure its ongoing safety and integrity.",
+        { sz: 20, after: 160 }
+      ) +
+      wPara(
+        "It is imperative to note that this form does not imply acceptance of any site work performed by the contractor if it deviates from the building code or the contractual specifications outlined in the project documents.",
+        { sz: 20, after: 160 }
+      ) +
+      wPara(
+        'This document is not a replacement or substitute for “Form 2” or “Form 4”. It is strongly recommended that you apply for building approval from the applicable local authority/Municipality.',
+        { sz: 20, after: 200 }
+      ) +
+      wPara("Yours faithfully,", { sz: 20, after: 200 }) +
+      wPara(eng.name || "", { bold: true, sz: 20, after: 40 }) +
+      wPara("Pr. Eng.", { sz: 20, after: 40 }) +
+      wPara(eng.contact || "", { sz: 20, after: 40 });
+
+    return (
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" ' +
+      'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" ' +
+      'xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+      'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" ' +
+      'xmlns:v="urn:schemas-microsoft-com:vml" ' +
+      'xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" ' +
+      'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ' +
+      'xmlns:w10="urn:schemas-microsoft-com:office:word" ' +
+      'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
+      'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" ' +
+      'xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" ' +
+      'xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" ' +
+      'xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" ' +
+      'xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" ' +
+      'mc:Ignorable="w14 wp14">' +
+      '<w:body>' +
+      body +
+      '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/>' +
+      '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>' +
+      '</w:sectPr></w:body></w:document>'
+    );
+  }
+  async function downloadSclDocx(project) {
+    if (typeof JSZip === "undefined") {
+      throw new Error("JSZip failed to load");
+    }
+    const ref = (project.conformanceRef || "LMX-SCL-DRAFT").replace(/[^\w.-]+/g, "_");
+    const zip = new JSZip();
+    zip.file(
+      "[Content_Types].xml",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+        '<Default Extension="xml" ContentType="application/xml"/>' +
+        '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+        "</Types>"
+    );
+    zip.folder("_rels").file(
+      ".rels",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+        "</Relationships>"
+    );
+    const word = zip.folder("word");
+    word.file("document.xml", buildSclDocumentXml(project));
+    word.folder("_rels").file(
+      "document.xml.rels",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>'
+    );
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = ref + ".docx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
   function issueConformance(project) {
     if (!project) return;
-    const blockers = ScfHelper.blockers(project);
+    const blockers = sclGate(project);
     if (blockers.length) {
-      toast("Cannot issue SCF — missing: " + blockers.join("; "), "error");
+      toast("Cannot create SC Letter — missing: " + blockers.join("; "), "error");
       return;
     }
     if (isScfIssued(project)) {
-      toast("SCF already issued as " + (project.conformanceRef || "approved"), "error");
+      toast("SCL already issued as " + (project.conformanceRef || "approved"), "error");
       openScfPreview(project);
       return;
     }
     if (
       !confirm(
-        "Issue Structural Compliance Form for " +
+        "Create Structural Compliance Letter for " +
           (project.projectCode || project.projectName || "this project") +
-          "?\n\nAllocates next LMX-SCF-YYYY-NNN and stores a certificate snapshot."
+          "?\n\nAllocates next LMX-SCL-YYYY-NNN, stores a certificate snapshot, and downloads a Word (.docx) file."
       )
     ) {
       return;
@@ -2433,9 +2779,13 @@
     if (donePh) project.activePhaseId = donePh.id;
     project.updatedAt = nowIso();
     cacheDataLocally();
-    toast(localSaveHint("Issued " + meta.ref), "success");
+    toast(localSaveHint("Created " + meta.ref), "success");
     render();
-    openScfPreview(project);
+    downloadSclDocx(project).catch((err) => {
+      console.error(err);
+      toast("Word download failed — opening print preview instead", "error");
+      openScfPreview(project);
+    });
   }
 
   function buildScfHtml(project) {
@@ -2447,7 +2797,7 @@
       (project.structureTypes || []).join(", ") ||
       project.projectType ||
       "Photovoltaic mounting system";
-    const ref = (snap && snap.ref) || project.conformanceRef || "LMX-SCF-DRAFT";
+    const ref = (snap && snap.ref) || project.conformanceRef || "LMX-SCL-DRAFT";
     const issued =
       (snap && snap.dateLabel) ||
       (project.conformanceIssuedAt
@@ -2465,7 +2815,7 @@
       "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
       "<title>" +
       escapeHtml(ref) +
-      " — Structural Compliance Form</title>" +
+      " — Structural Compliance Letter</title>" +
       "<style>" +
       "body{font-family:Georgia,'Times New Roman',serif;max-width:820px;margin:24px auto;padding:0 16px;color:#111;line-height:1.45}" +
       "h1{font-size:1.25rem;letter-spacing:0.04em;margin:1.2rem 0 0.6rem}" +
@@ -2550,7 +2900,7 @@
     const html = buildScfHtml(project);
     const w = window.open("", "_blank");
     if (!w) {
-      toast("Popup blocked — allow popups to preview the SCF print view.", "error");
+      toast("Popup blocked — allow popups to preview the SCL print view.", "error");
       return;
     }
     w.document.open();
@@ -2574,11 +2924,11 @@
         `<div class="form-group"><label>My name (for Dashboard “My work”)</label>` +
         `<input id="set-my-name" value="${escapeHtml(ds.myAssignee || "")}" placeholder="e.g. Alex Engineer" />` +
         `<p class="hint">Match the assignee string used on tasks.</p></div>` +
-        `<div class="settings-section"><h3>Structural Compliance (SCF)</h3>` +
+        `<div class="settings-section"><h3>Structural Compliance Letter (SCL)</h3>` +
         `<div class="form-row">` +
-        `<div class="form-group"><label>SCF year</label><input id="set-scf-year" type="number" min="2000" max="2100" value="${escapeHtml(String(ds.scfYear || new Date().getFullYear()))}" /></div>` +
-        `<div class="form-group"><label>Next SCF sequence</label><input id="set-scf-seq" type="number" min="1" value="${escapeHtml(String(ds.scfSeq || 1))}" />` +
-        `<p class="hint">Next ref will be <code>LMX-SCF-YEAR-NNN</code> (never bare 008).</p></div>` +
+        `<div class="form-group"><label>SCL year</label><input id="set-scf-year" type="number" min="2000" max="2100" value="${escapeHtml(String(ds.scfYear || new Date().getFullYear()))}" /></div>` +
+        `<div class="form-group"><label>Next SCL sequence</label><input id="set-scf-seq" type="number" min="1" value="${escapeHtml(String(ds.scfSeq || 1))}" />` +
+        `<p class="hint">Next ref will be <code>LMX-SCL-YEAR-NNN</code> (never bare 008). Legacy LMX-SCF-* refs stay readable.</p></div>` +
         `</div>` +
         `<div class="form-row">` +
         `<div class="form-group"><label>Engineer name</label><input id="set-eng-name" value="${escapeHtml(eng.name)}" /></div>` +
@@ -2587,7 +2937,7 @@
         `<div class="form-group"><label>Business name</label><input id="set-eng-biz" value="${escapeHtml(eng.business)}" /></div>` +
         `<div class="form-group"><label>Business address</label><input id="set-eng-addr" value="${escapeHtml(eng.address)}" /></div>` +
         `<div class="form-group"><label>Contact details</label><input id="set-eng-contact" value="${escapeHtml(eng.contact)}" /></div>` +
-        `<p class="hint">Editable defaults printed on SCF previews (fictional SAMPLE values ship in seed data).</p></div>` +
+        `<p class="hint">Editable defaults printed on SCL letters (fictional SAMPLE values ship in seed data).</p></div>` +
         `<div class="settings-section"><h3>Project types (selectable + free text)</h3>` +
         `<textarea id="set-project-types" rows="3" placeholder="One type per line">${escapeHtml(getProjectTypes().join("\n"))}</textarea></div>` +
         `<div class="settings-section"><h3>Structure types</h3>` +
@@ -2753,7 +3103,7 @@
         `<input id="pf-struct-extra" value="" placeholder="Add other structure type (comma-separated)" style="margin-top:0.4rem" />` +
         `</div>` +
         `<div class="form-row">` +
-        `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="pf-eng-signoff"${p && p.engineeringSignOff ? " checked" : ""}/> Engineering sign-off</label>` +
+        `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="pf-eng-signoff"${p && p.engineeringSignOff ? " checked" : ""}/> Municipal sign-off</label>` +
         `<p class="hint">Toggle when engineering has signed off this project.</p></div>` +
         `<div class="form-group"><label>Conformance</label>` +
         `<select id="pf-conformance">` +
@@ -2762,7 +3112,7 @@
           return `<option value="${s.id}"${cur === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`;
         }).join("") +
         `</select>` +
-        `<p class="hint">Issue via <strong>Issue conformance</strong> on the project (sets approved + LMX-SCF ref).</p></div>` +
+        `<p class="hint">Create via <strong>Create SC Letter</strong> on the project (sets approved + LMX-SCL ref).</p></div>` +
         `</div>` +
         `<div class="form-row" id="pf-signoff-extra">` +
         `<div class="form-group"><label>Sign-off at</label><input type="date" id="pf-signoff-at" value="${escapeHtml(p && p.engineeringSignOffAt ? String(p.engineeringSignOffAt).slice(0, 10) : "")}" /></div>` +
@@ -2780,7 +3130,7 @@
         `<div class="dyn-list" id="pf-customs"></div>` +
         `<button type="button" class="btn btn-secondary btn-sm" id="pf-add-custom" style="margin-top:0.4rem">+ Field</button></div>` +
         (!isEdit
-          ? `<p class="hint">New projects get default phases ending in <strong>Done</strong> (terminal for SCF issue).</p>`
+          ? `<p class="hint">New projects get default phases ending in <strong>Done</strong> (terminal for SCL).</p>`
           : "") +
         `<div class="panel-actions">` +
         (isEdit ? `<button type="button" class="btn btn-danger" id="pf-delete" style="margin-right:auto">Delete</button>` : "") +
@@ -2936,7 +3286,11 @@
       }
       cacheDataLocally();
       closeOverlay();
-      render();
+      if (isEdit && state.selectedProjectId === p.id && state.view === "detail") {
+        renderDetail();
+      } else {
+        render();
+      }
       toast(localSaveHint(isEdit ? "Project updated" : "Project created"), "success");
     };
   }
@@ -3201,6 +3555,7 @@
           overdueOnly: false,
           projectId: "",
           client: "",
+          structureType: "",
         };
         setView(btn.dataset.view);
       };
