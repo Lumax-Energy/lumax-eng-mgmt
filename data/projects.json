@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-08T12:01:56.926Z",
+  "updatedAt": "2026-09-08T12:04:23.425Z",
   "settings": {
     "taskStatuses": [
       {
@@ -627,7 +627,7 @@
       "activePhaseId": null,
       "archived": false,
       "createdAt": "2026-09-08T12:01:03.760Z",
-      "updatedAt": "2026-09-08T12:01:52.272Z"
+      "updatedAt": "2026-09-08T12:04:20.744Z"
     }
   ],
   "tasks": [
@@ -942,6 +942,78 @@
       "discipline": "Structural Eng.",
       "createdAt": "2026-09-08T12:01:52.272Z",
       "updatedAt": "2026-09-08T12:01:52.272Z"
+    },
+    {
+      "id": "task-vlx52c8ge2va",
+      "projectId": "proj-ciy099scc174",
+      "title": "Geotech",
+      "description": "",
+      "type": "eng_task",
+      "statusId": "status-in-check",
+      "assignee": "Rivaal",
+      "priority": "medium",
+      "dueDate": null,
+      "phaseId": "phase-vv4z2p21c174",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Geotechnical Eng.",
+      "createdAt": "2026-09-08T12:02:39.238Z",
+      "updatedAt": "2026-09-08T12:02:39.238Z"
+    },
+    {
+      "id": "task-fgr37fkgevxc",
+      "projectId": "proj-ciy099scc174",
+      "title": "Prokon Check",
+      "description": "",
+      "type": "calculation",
+      "statusId": "status-doing",
+      "assignee": "Rivaal",
+      "priority": "high",
+      "dueDate": null,
+      "phaseId": "phase-d1m3j81hc174",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Structural Eng.",
+      "createdAt": "2026-09-08T12:03:16.896Z",
+      "updatedAt": "2026-09-08T12:03:16.896Z"
+    },
+    {
+      "id": "task-0rl5w2twfx7f",
+      "projectId": "proj-ciy099scc174",
+      "title": "Site Inspect nr.6",
+      "description": "",
+      "type": "site_visit",
+      "statusId": "status-blocked",
+      "assignee": "Rivaal",
+      "priority": "high",
+      "dueDate": null,
+      "phaseId": "phase-v4746sjdc174",
+      "blockedReason": "Because",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Structural",
+      "createdAt": "2026-09-08T12:04:05.211Z",
+      "updatedAt": "2026-09-08T12:04:11.883Z"
     }
   ]
 }
