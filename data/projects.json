@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-08T12:10:42.188Z",
+  "updatedAt": "2026-09-08T12:11:10.311Z",
   "settings": {
     "taskStatuses": [
       {
@@ -923,7 +923,7 @@
       "title": "Rivaal's House",
       "description": "",
       "type": "eng_task",
-      "statusId": "status-blocked",
+      "statusId": "status-done",
       "assignee": "Rivaal",
       "priority": "high",
       "dueDate": "2026-09-11",
@@ -939,7 +939,7 @@
       "rev": "",
       "discipline": "Structural Eng.",
       "createdAt": "2026-09-08T12:01:52.272Z",
-      "updatedAt": "2026-09-08T12:10:40.530Z"
+      "updatedAt": "2026-09-08T12:10:58.871Z"
     },
     {
       "id": "task-vlx52c8ge2va",
@@ -947,7 +947,7 @@
       "title": "Geotech",
       "description": "",
       "type": "eng_task",
-      "statusId": "status-in-check",
+      "statusId": "status-blocked",
       "assignee": "Rivaal",
       "priority": "medium",
       "dueDate": null,
@@ -963,7 +963,7 @@
       "rev": "",
       "discipline": "Geotechnical Eng.",
       "createdAt": "2026-09-08T12:02:39.238Z",
-      "updatedAt": "2026-09-08T12:10:08.509Z"
+      "updatedAt": "2026-09-08T12:11:01.893Z"
     },
     {
       "id": "task-fgr37fkgevxc",
