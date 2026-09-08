@@ -1,8 +1,8 @@
-# Lumax Energy — Engineering Management (v2.2)
+# Lumax Energy — Engineering Management (v2.3)
 
 Single-page static app for engineering project & task tracking. No build step. Works on **GitHub Pages** or any static host.
 
-**v2.2** UX pass: Dashboard labels (Engineer / Structure type / Municipal sign-off / Conformance letter / SCL), **Create SC Letter** Word (.docx) download (`LMX-SCL-YYYY-NNN`), Tasks structure-type filter, phase drag-and-drop, Excel navy header polish. Preserves GitHub Load/Save JSON sync (null-safe `wire()` from #3). Legacy `LMX-SCF-*` refs remain readable.
+**v2.3** Executive / SCL pass: Researchy **6 KPI** traffic-light dashboard (Open projects · Overdue work · Ready for SC letter · SC letters issued · Commercial gaps · Municipal sign-off pending), Excel Dashboard sheet `KPI | Value | Light | Note`, **Structural Conformance Letter** label, structure-type defaults (Carport H-Max … Custom), editable task + project types in Settings, `municipalSignOff` (`pending` | `approved` | `n/a`), **Undo Create SC Letter** (void + keep sequence advanced). Preserves GitHub Load/Save SHA-safe sync, Create SC Letter gate, phase DnD, null-safe `wire()`, Excel navy polish.
 
 ## Go live (5 steps)
 
@@ -48,38 +48,46 @@ Drag task cards onto **phase tabs** to change `phaseId`, or onto status columns 
 | `contactPerson` | Required |
 | `projectType` | Selectable list (Settings) + free text |
 | `structureTypes[]` | Multi-select from Settings list (Tasks filter + Structure type chip) |
-| `engineeringSignOff` | Displayed as **Municipal sign-off** (+ at/by) |
+| `municipalSignOff` | `pending` \| `approved` \| `n/a` (migrates from legacy `engineeringSignOff` boolean) |
 | `conformanceStatus` | `none` \| `pending` \| `approved` |
 | `conformanceRef` | `LMX-SCL-YYYY-NNN` (legacy `LMX-SCF-*` still shown) |
 | `conformanceIssuedAt` | ISO timestamp |
 | `conformanceCert` | Snapshot at issue (for stable print / Word export) |
+| `sclUndoSnapshot` | Pre-issue fields for **Undo Create SC Letter** |
+| `sclHistory` | Issued / voided letter audit trail |
 
-**Create SC Letter** (project detail): enabled only when INV + contact + address are set **and** current phase name is **Done** (case-insensitive). `sclGate(project)` recomputes on every detail render (including after project form Save). Allocates next ref from `settings.scfYear` / `settings.scfSeq`, sets status approved, downloads a Word `.docx` matching the Structural Compliance Form layout. Checklist + toast list blockers when disabled.
+**Create SC Letter** (project detail): enabled only when INV + contact + address are set **and** current phase name is **Done** (case-insensitive). Allocates next ref from `settings.scfYear` / `settings.scfSeq`, sets status approved, downloads a Word `.docx` matching the Structural Compliance Form sample. **Undo Create SC Letter** restores the pre-issue snapshot and voids the letter record without reusing the sequence number.
 
 Engineer block defaults live in `settings.engineerDefaults` (editable in Settings) — SAMPLE uses fictional values only.
 
-### Dashboard view chips
+### Executive dashboard (6 KPIs)
 
-Clients · **Engineer** · **Structure type** · **Municipal sign-off** · **Conformance letter** · **SCL ready** · **SCL issued** · **Commercial gaps** · **Missing PO/POP/INV** · **Pending site investigation**
+Click a traffic-light card to filter:
 
-(Removed: Missing INV, Missing address.)
+1. Open projects  
+2. Overdue work  
+3. Ready for SC letter  
+4. SC letters issued  
+5. Commercial gaps  
+6. Municipal sign-off pending  
+
+Chips also include: Clients · Engineer · Structure type · Structural Conformance Letter · Site investigation.
 
 ### Task types
 
-| Type id | Label | Extra fields |
-|---------|-------|----------------|
-| `rdn` | RDN | Ref #, raised-by, response due |
-| `design_check` | Design check | Checker, calc/drawing ref |
-| `drawing` | Drawing | Drawing #, rev |
-| `eng_task` | Eng task | Discipline |
+Defaults (editable in Settings — add / edit / remove): RDN · Design check · Drawing · Eng task · Site visit · Calculation · Review · Coordination · Other.
 
 Tasks view includes a **Structure type** dropdown (project `structureTypes` / task override).
+
+### Structure types (defaults)
+
+Carport H-Max · Carport Alu-Max · Carport Econo-Max · Carport Ergo-Max · Carport Ergo+ · GM Steel · GM Alu · SAT tracker · Rooftop ballast · Rooftop flush mount · Custom (+ add more in Settings).
 
 ### Excel export
 
 Workbook sheets with shared navy header helper (`#0B1F3A`, white bold, freeze, autofilter, thin borders, approx widths):
 
-1. Dashboard (title row) · 2. All Tasks · 3. **Projects** · 4. **SCL** · 5. By Assignee · 6. By Client · 7. By Project · 8. RDN · 9. Design Checks · 10. Drawings · 11. Eng Tasks · 12. Summary
+1. Dashboard (`KPI | Value | Light | Note` + ops snapshot) · 2. All Tasks · 3. **Projects** · 4. **SCL** · 5. By Assignee · 6. By Client · 7. By Project · 8. RDN · 9. Design Checks · 10. Drawings · 11. Eng Tasks · 12. Summary
 
 UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCL / Summary / By-* use the full dataset.
 
@@ -88,12 +96,12 @@ UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCL / Summ
 - **Load** — `GET` `data/projects.json` (reads SHA).
 - **Save** — `PUT` with current SHA. Conflicts show toast with **Load & retry** (does not silently overwrite).
 - PAT stored **only in localStorage** — never in `projects.json`.
-- `normalizeData()` upgrades older payloads (adds Done phase, commercial fields, SCL settings keys `scfYear`/`scfSeq`).
+- `normalizeData()` upgrades older payloads (Done phase, commercial fields, `municipalSignOff`, SCL settings, task types).
 - `wire()` is null-safe for missing header buttons (preserves #3 fix).
 
 ## Sample data
 
-`data/projects.json` ships with **≥4 clearly labeled SAMPLE** projects (fictional Demo clients / DEMO-* codes), multiple assignees, ≥2 in Site investigation, varied types (PV GM SteelCore, Rooftop ballast, SAT, Carport), mixed task types, one project **ready to create** (INV+contact+address+Done), and one **already issued** (may show legacy `LMX-SCF-2026-001`). Safe to edit or delete after onboarding.
+`data/projects.json` ships with **≥4 clearly labeled SAMPLE** projects (fictional Demo clients / DEMO-* codes), multiple assignees, ≥2 in Site investigation, varied structure types, mixed task types, one project **ready to create** (INV+contact+address+Done), and one **already issued**. Safe to edit or delete after onboarding.
 
 ## Security reminders
 
