@@ -1,42 +1,42 @@
 {
   "version": 2.1,
-  "updatedAt": "2026-09-08T08:44:05.769Z",
+  "updatedAt": "2026-09-08T08:45:29.676Z",
   "settings": {
     "taskStatuses": [
       {
         "id": "status-backlog",
         "name": "Backlog",
-        "color": "#6b7c93",
+        "color": "#ff9500",
         "category": "todo"
       },
       {
         "id": "status-todo",
         "name": "To do",
-        "color": "#5c6b7e",
+        "color": "#ff0000",
         "category": "todo"
       },
       {
         "id": "status-doing",
         "name": "Doing",
-        "color": "#2f80ed",
+        "color": "#1eff00",
         "category": "doing"
       },
       {
         "id": "status-in-check",
         "name": "In check",
-        "color": "#9b59b6",
+        "color": "#fbff00",
         "category": "doing"
       },
       {
         "id": "status-blocked",
         "name": "Blocked",
-        "color": "#c0392b",
+        "color": "#00eeff",
         "category": null
       },
       {
         "id": "status-done",
         "name": "Done",
-        "color": "#1a7f4b",
+        "color": "#0400ff",
         "category": "done"
       }
     ],
