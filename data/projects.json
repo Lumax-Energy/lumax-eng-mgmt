@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-08T11:35:28.484Z",
+  "updatedAt": "2026-09-08T12:01:56.926Z",
   "settings": {
     "taskStatuses": [
       {
@@ -108,7 +108,7 @@
       "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
     },
     "scfYear": 2026,
-    "scfSeq": 3,
+    "scfSeq": 4,
     "voidedLetters": []
   },
   "projects": [
@@ -325,16 +325,57 @@
       "engineeringSignOff": false,
       "engineeringSignOffAt": null,
       "engineeringSignOffBy": "",
-      "conformanceStatus": "none",
-      "conformanceRef": "",
-      "conformanceIssuedAt": null,
-      "conformanceCert": null,
-      "sclUndoSnapshot": null,
-      "sclHistory": [],
-      "activePhaseId": null,
+      "conformanceStatus": "approved",
+      "conformanceRef": "LMX-SCL-2026-003",
+      "conformanceIssuedAt": "2026-09-08T11:36:47.192Z",
+      "conformanceCert": {
+        "ref": "LMX-SCL-2026-003",
+        "issuedAt": "2026-09-08T11:36:47.192Z",
+        "dateLabel": "08/09/2026",
+        "clientName": "SAMPLE Client Gamma",
+        "projectName": "SAMPLE Mid-design SAT Array",
+        "projectCode": "DEMO-MID-SAT",
+        "projectType": "SAT",
+        "structureTypes": [
+          "SAT tracker"
+        ],
+        "address": "50 street, Centurion",
+        "contactPerson": "Riley Site ÃÂ· +27 71 000 0003",
+        "invoiceNumber": "INV-DEMO-555",
+        "poNumber": "",
+        "popReference": "POP-DEMO-112",
+        "drawingNumbers": [
+          "SAT-GA-01"
+        ],
+        "engineer": {
+          "name": "Demo Pr. Eng. (SAMPLE)",
+          "ecsaNo": "ECSA-DEMO-00000",
+          "business": "Lumax ENERGY (PTY) Ltd",
+          "address": "Corporate Park North, Midrand 1685",
+          "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
+        }
+      },
+      "sclUndoSnapshot": {
+        "conformanceStatus": "none",
+        "conformanceRef": "",
+        "conformanceIssuedAt": null,
+        "conformanceCert": null,
+        "activePhaseId": null
+      },
+      "sclHistory": [
+        {
+          "ref": "LMX-SCL-2026-003",
+          "issuedAt": "2026-09-08T11:36:47.192Z",
+          "action": "issued",
+          "at": "2026-09-08T11:36:47.192Z",
+          "seq": 3,
+          "year": 2026
+        }
+      ],
+      "activePhaseId": "mid-phase-done",
       "archived": false,
       "createdAt": "2026-08-10T08:00:00.000Z",
-      "updatedAt": "2026-09-08T09:52:47.566Z"
+      "updatedAt": "2026-09-08T11:36:47.192Z"
     },
     {
       "id": "proj-sample-archived-scf",
@@ -514,6 +555,79 @@
       "archived": true,
       "createdAt": "2026-08-01T08:00:00.000Z",
       "updatedAt": "2026-09-08T08:48:48.338Z"
+    },
+    {
+      "id": "proj-ciy099scc174",
+      "clientName": "Terra-firma",
+      "projectName": "Rivaals' House",
+      "projectCode": "Ter-SAT-009",
+      "salesOrderNumber": "SO65465168468",
+      "poNumber": "PO684684",
+      "popReference": "POP658416812",
+      "invoiceNumber": "INV65846981",
+      "address": "KZN",
+      "contactPerson": "Rivaal - 564186541681",
+      "projectType": "SAT tracker",
+      "structureTypes": [
+        "SAT tracker"
+      ],
+      "drawingNumbers": [
+        "TER-CP-68108",
+        "TER-CP-68168"
+      ],
+      "customFields": {},
+      "phases": [
+        {
+          "id": "phase-7duc92azc174",
+          "name": "Intake"
+        },
+        {
+          "id": "phase-d1m3j81hc174",
+          "name": "Concept"
+        },
+        {
+          "id": "phase-llht3r36c174",
+          "name": "Design"
+        },
+        {
+          "id": "phase-smhzqn6yc174",
+          "name": "Check"
+        },
+        {
+          "id": "phase-h4ouawe3c174",
+          "name": "Drawings"
+        },
+        {
+          "id": "phase-iiw8iocjc174",
+          "name": "Site investigation"
+        },
+        {
+          "id": "phase-vv4z2p21c174",
+          "name": "Site/Construction support"
+        },
+        {
+          "id": "phase-v4746sjdc174",
+          "name": "Close-out"
+        },
+        {
+          "id": "phase-lie2h294c174",
+          "name": "Done"
+        }
+      ],
+      "municipalSignOff": "n/a",
+      "engineeringSignOff": false,
+      "engineeringSignOffAt": "2026-09-12",
+      "engineeringSignOffBy": "Yaima",
+      "conformanceStatus": "pending",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
+      "sclUndoSnapshot": null,
+      "sclHistory": [],
+      "activePhaseId": null,
+      "archived": false,
+      "createdAt": "2026-09-08T12:01:03.760Z",
+      "updatedAt": "2026-09-08T12:01:52.272Z"
     }
   ],
   "tasks": [
@@ -804,6 +918,30 @@
       "discipline": "",
       "createdAt": "2026-09-08T09:51:58.534Z",
       "updatedAt": "2026-09-08T09:52:18.593Z"
+    },
+    {
+      "id": "task-3lbey8ujd2mo",
+      "projectId": "proj-ciy099scc174",
+      "title": "Rivaal's House",
+      "description": "",
+      "type": "eng_task",
+      "statusId": "status-doing",
+      "assignee": "Rivaal",
+      "priority": "high",
+      "dueDate": "2026-09-11",
+      "phaseId": "phase-iiw8iocjc174",
+      "blockedReason": "",
+      "doneDate": "2026-09-23",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Structural Eng.",
+      "createdAt": "2026-09-08T12:01:52.272Z",
+      "updatedAt": "2026-09-08T12:01:52.272Z"
     }
   ]
 }
