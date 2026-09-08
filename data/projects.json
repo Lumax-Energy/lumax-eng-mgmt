@@ -1,5 +1,5 @@
 {
-  "version": 2.2,
+  "version": 2.3,
   "updatedAt": "2026-09-08T09:53:31.603Z",
   "settings": {
     "taskStatuses": [
@@ -43,10 +43,10 @@
     "myAssignee": "",
     "projectTypes": [
       "Carport",
-      "GM",
-      "SAT",
-      "Rooftop",
+      "Ground mount",
+      "SAT tracker",
       "Rooftop ballast",
+      "Rooftop flush mount",
       "Custom"
     ],
     "structureTypes": [
@@ -65,18 +65,57 @@
     "engineerDefaults": {
       "name": "Demo Pr. Eng. (SAMPLE)",
       "ecsaNo": "ECSA-DEMO-00000",
-      "business": "Lumax ENERGY (PTY) Ltd â SAMPLE",
+      "business": "Lumax ENERGY (PTY) Ltd — SAMPLE",
       "address": "Demo Corporate Park North, Midrand 1685",
-      "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
+      "contact": "+27(0) 00 000 0000 · demo-eng@example.invalid"
     },
     "scfYear": 2026,
-    "scfSeq": 4
+    "scfSeq": 3,
+    "taskTypes": [
+      {
+        "id": "rdn",
+        "name": "RDN"
+      },
+      {
+        "id": "design_check",
+        "name": "Design check"
+      },
+      {
+        "id": "drawing",
+        "name": "Drawing"
+      },
+      {
+        "id": "eng_task",
+        "name": "Eng task"
+      },
+      {
+        "id": "site_visit",
+        "name": "Site visit"
+      },
+      {
+        "id": "calculation",
+        "name": "Calculation"
+      },
+      {
+        "id": "review",
+        "name": "Review"
+      },
+      {
+        "id": "coordination",
+        "name": "Coordination"
+      },
+      {
+        "id": "other",
+        "name": "Other"
+      }
+    ],
+    "voidedLetters": []
   },
   "projects": [
     {
       "id": "proj-sample-ready-scf",
       "clientName": "SAMPLE Client Alpha",
-      "projectName": "SAMPLE â Ready SCF Farm (Groblersdal fiction)",
+      "projectName": "SAMPLE — Ready SCF Farm (Groblersdal fiction)",
       "projectCode": "DEMO-SCF-READY",
       "salesOrderNumber": "SO-DEMO-2001",
       "poNumber": "PO-DEMO-7781",
@@ -84,9 +123,9 @@
       "invoiceNumber": "1002/70003244",
       "address": "V8C7+HP Groblersdal (fictional) Â· -25.128538, 29.314367",
       "contactPerson": "Ben-Ernst Sample Â· +27 76 000 0001",
-      "projectType": "PV GM (SteelCore)",
+      "projectType": "Ground mount",
       "structureTypes": [
-        "PV GM (SteelCore)"
+        "GM Steel"
       ],
       "drawingNumbers": [
         "TZF-GM-001",
@@ -133,54 +172,30 @@
           "name": "Done"
         }
       ],
-      "engineeringSignOff": true,
+      "engineeringSignOff": false,
       "engineeringSignOffAt": "2026-09-01T10:00:00.000Z",
       "engineeringSignOffBy": "Demo Engineer",
-      "conformanceStatus": "approved",
-      "conformanceRef": "LMX-SCL-2026-003",
-      "conformanceIssuedAt": "2026-09-08T09:40:30.120Z",
-      "conformanceCert": {
-        "ref": "LMX-SCL-2026-003",
-        "issuedAt": "2026-09-08T09:40:30.120Z",
-        "dateLabel": "08/09/2026",
-        "clientName": "SAMPLE Client Alpha",
-        "projectName": "SAMPLE â Ready SCF Farm (Groblersdal fiction)",
-        "projectCode": "DEMO-SCF-READY",
-        "projectType": "PV GM (SteelCore)",
-        "structureTypes": [
-          "PV GM (SteelCore)"
-        ],
-        "address": "V8C7+HP Groblersdal (fictional) Â· -25.128538, 29.314367",
-        "contactPerson": "Ben-Ernst Sample Â· +27 76 000 0001",
-        "invoiceNumber": "1002/70003244",
-        "poNumber": "PO-DEMO-7781",
-        "popReference": "POP-DEMO-441",
-        "drawingNumbers": [
-          "TZF-GM-001",
-          "TZF-GM-002"
-        ],
-        "engineer": {
-          "name": "Demo Pr. Eng. (SAMPLE)",
-          "ecsaNo": "ECSA-DEMO-00000",
-          "business": "Lumax ENERGY (PTY) Ltd â SAMPLE",
-          "address": "Demo Corporate Park North, Midrand 1685",
-          "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
-        }
-      },
+      "conformanceStatus": "none",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
       "activePhaseId": "ready-phase-done",
       "archived": false,
       "createdAt": "2026-07-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T09:40:30.120Z"
+      "updatedAt": "2026-09-08T09:40:30.120Z",
+      "municipalSignOff": "pending",
+      "sclHistory": [],
+      "sclUndoSnapshot": null
     },
     {
       "id": "proj-sample-missing-inv",
       "clientName": "SAMPLE Client Beta",
-      "projectName": "SAMPLE â Missing INV Rooftop",
+      "projectName": "SAMPLE — Missing INV Rooftop",
       "projectCode": "DEMO-MISS-INV",
       "salesOrderNumber": "SO-DEMO-2002",
       "poNumber": "PO-DEMO-9001",
       "popReference": "",
-      "invoiceNumber": "6",
+      "invoiceNumber": "",
       "address": "12 Fiction Road, Midrand (SAMPLE)",
       "contactPerson": "Casey Contact Â· +27 82 000 0002",
       "projectType": "Rooftop ballast",
@@ -235,41 +250,17 @@
       "engineeringSignOff": false,
       "engineeringSignOffAt": null,
       "engineeringSignOffBy": "",
-      "conformanceStatus": "approved",
-      "conformanceRef": "LMX-SCF-2026-002",
-      "conformanceIssuedAt": "2026-09-08T08:52:55.627Z",
-      "conformanceCert": {
-        "ref": "LMX-SCF-2026-002",
-        "issuedAt": "2026-09-08T08:52:55.627Z",
-        "dateLabel": "08/09/2026",
-        "clientName": "SAMPLE Client Beta",
-        "projectName": "SAMPLE â Missing INV Rooftop",
-        "projectCode": "DEMO-MISS-INV",
-        "projectType": "Rooftop ballast",
-        "structureTypes": [
-          "Carport H-Max",
-          "Rooftop ballast"
-        ],
-        "address": "12 Fiction Road, Midrand (SAMPLE)",
-        "contactPerson": "Casey Contact Â· +27 82 000 0002",
-        "invoiceNumber": "4",
-        "poNumber": "PO-DEMO-9001",
-        "popReference": "",
-        "drawingNumbers": [
-          "DRW-RT-101"
-        ],
-        "engineer": {
-          "name": "Demo Pr. Eng. (SAMPLE)",
-          "ecsaNo": "ECSA-DEMO-00000",
-          "business": "Lumax ENERGY (PTY) Ltd â SAMPLE",
-          "address": "Demo Corporate Park North, Midrand 1685",
-          "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
-        }
-      },
+      "conformanceStatus": "none",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
       "activePhaseId": "gap-phase-done",
       "archived": false,
       "createdAt": "2026-08-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T08:53:36.827Z"
+      "updatedAt": "2026-09-08T08:53:36.827Z",
+      "municipalSignOff": "pending",
+      "sclHistory": [],
+      "sclUndoSnapshot": null
     },
     {
       "id": "proj-sample-mid-design",
@@ -340,12 +331,15 @@
       "activePhaseId": null,
       "archived": false,
       "createdAt": "2026-08-10T08:00:00.000Z",
-      "updatedAt": "2026-09-08T09:52:47.566Z"
+      "updatedAt": "2026-09-08T09:52:47.566Z",
+      "municipalSignOff": "n/a",
+      "sclHistory": [],
+      "sclUndoSnapshot": null
     },
     {
       "id": "proj-sample-archived-scf",
       "clientName": "SAMPLE Client Delta",
-      "projectName": "SAMPLE â Archived Carport (issued)",
+      "projectName": "SAMPLE — Archived Carport (issued)",
       "projectCode": "DEMO-ARCH-001",
       "salesOrderNumber": "SO-DEMO-1999",
       "poNumber": "PO-ARCH-88",
@@ -355,7 +349,7 @@
       "contactPerson": "Morgan Owner Â· +27 83 000 0004",
       "projectType": "Carport",
       "structureTypes": [
-        "Carport"
+        "Custom"
       ],
       "drawingNumbers": [
         "CRP-001",
@@ -439,12 +433,15 @@
       "activePhaseId": "arch-phase-done",
       "archived": false,
       "createdAt": "2026-05-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T08:50:33.214Z"
+      "updatedAt": "2026-09-08T08:50:33.214Z",
+      "municipalSignOff": "approved",
+      "sclHistory": [],
+      "sclUndoSnapshot": null
     },
     {
       "id": "proj-sample-demo-001",
       "clientName": "Demo",
-      "projectName": "SAMPLE â Demo Solar Array",
+      "projectName": "SAMPLE — Demo Solar Array",
       "projectCode": "DEMO-001",
       "salesOrderNumber": "SO-DEMO-1001",
       "poNumber": "PO-DEMO-1001",
@@ -454,8 +451,7 @@
       "contactPerson": "Alex Engineer Â· +27 60 000 0005",
       "projectType": "PV GM (SteelCore)",
       "structureTypes": [
-        "PV GM (SteelCore)",
-        "Ground mount other"
+        "GM Steel"
       ],
       "drawingNumbers": [
         "DRW-DEMO-001",
@@ -514,7 +510,10 @@
       "activePhaseId": null,
       "archived": true,
       "createdAt": "2026-08-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T08:48:48.338Z"
+      "updatedAt": "2026-09-08T08:48:48.338Z",
+      "municipalSignOff": "approved",
+      "sclHistory": [],
+      "sclUndoSnapshot": null
     }
   ],
   "tasks": [
