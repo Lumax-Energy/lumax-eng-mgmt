@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-08T12:04:23.425Z",
+  "updatedAt": "2026-09-08T12:10:32.098Z",
   "settings": {
     "taskStatuses": [
       {
@@ -105,7 +105,7 @@
       "ecsaNo": "ECSA-DEMO-00000",
       "business": "Lumax ENERGY (PTY) Ltd",
       "address": "Corporate Park North, Midrand 1685",
-      "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
+      "contact": "+27(0) 00 000 0000 ÃÂ· demo-eng@example.invalid"
     },
     "scfYear": 2026,
     "scfSeq": 4,
@@ -115,14 +115,14 @@
     {
       "id": "proj-sample-ready-scf",
       "clientName": "SAMPLE Client Alpha",
-      "projectName": "SAMPLE â Ready SCF Farm (Groblersdal fiction)",
+      "projectName": "SAMPLE Ã¢ÂÂ Ready SCF Farm (Groblersdal fiction)",
       "projectCode": "DEMO-SCF-READY",
       "salesOrderNumber": "SO-DEMO-2001",
       "poNumber": "PO-DEMO-7781",
       "popReference": "POP-DEMO-441",
       "invoiceNumber": "1002/70003244",
-      "address": "V8C7+HP Groblersdal (fictional) ÃÂ· -25.128538, 29.314367",
-      "contactPerson": "Ben-Ernst Sample ÃÂ· +27 76 000 0001",
+      "address": "V8C7+HP Groblersdal (fictional) ÃÂÃÂ· -25.128538, 29.314367",
+      "contactPerson": "Ben-Ernst Sample ÃÂÃÂ· +27 76 000 0001",
       "projectType": "Ground mount",
       "structureTypes": [
         "GM Steel"
@@ -132,7 +132,7 @@
         "TZF-GM-002"
       ],
       "customFields": {
-        "Note": "Fictional SAMPLE Ã¢ÂÂ ready to certify"
+        "Note": "Fictional SAMPLE ÃÂ¢ÃÂÃÂ ready to certify"
       },
       "phases": [
         {
@@ -190,14 +190,14 @@
     {
       "id": "proj-sample-missing-inv",
       "clientName": "SAMPLE Client Beta",
-      "projectName": "SAMPLE â Missing INV Rooftop",
+      "projectName": "SAMPLE Ã¢ÂÂ Missing INV Rooftop",
       "projectCode": "DEMO-MISS-INV",
       "salesOrderNumber": "SO-DEMO-2002",
       "poNumber": "PO-DEMO-9001",
       "popReference": "",
       "invoiceNumber": "",
       "address": "12 Fiction Road, Midrand (SAMPLE)",
-      "contactPerson": "Casey Contact ÃÂ· +27 82 000 0002",
+      "contactPerson": "Casey Contact ÃÂÃÂ· +27 82 000 0002",
       "projectType": "Rooftop ballast",
       "structureTypes": [
         "Carport H-Max",
@@ -207,7 +207,7 @@
         "DRW-RT-101"
       ],
       "customFields": {
-        "Note": "Fictional SAMPLE Ã¢ÂÂ missing invoice"
+        "Note": "Fictional SAMPLE ÃÂ¢ÃÂÃÂ missing invoice"
       },
       "phases": [
         {
@@ -272,7 +272,7 @@
       "popReference": "POP-DEMO-112",
       "invoiceNumber": "INV-DEMO-555",
       "address": "50 street, Centurion",
-      "contactPerson": "Riley Site ÃÂ· +27 71 000 0003",
+      "contactPerson": "Riley Site ÃÂÃÂ· +27 71 000 0003",
       "projectType": "SAT",
       "structureTypes": [
         "SAT tracker"
@@ -281,7 +281,7 @@
         "SAT-GA-01"
       ],
       "customFields": {
-        "Note": "Fictional SAMPLE Ã¢ÂÂ mid design / site investigation"
+        "Note": "Fictional SAMPLE ÃÂ¢ÃÂÃÂ mid design / site investigation"
       },
       "phases": [
         {
@@ -340,7 +340,7 @@
           "SAT tracker"
         ],
         "address": "50 street, Centurion",
-        "contactPerson": "Riley Site ÃÂ· +27 71 000 0003",
+        "contactPerson": "Riley Site ÃÂÃÂ· +27 71 000 0003",
         "invoiceNumber": "INV-DEMO-555",
         "poNumber": "",
         "popReference": "POP-DEMO-112",
@@ -352,7 +352,7 @@
           "ecsaNo": "ECSA-DEMO-00000",
           "business": "Lumax ENERGY (PTY) Ltd",
           "address": "Corporate Park North, Midrand 1685",
-          "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
+          "contact": "+27(0) 00 000 0000 ÃÂ· demo-eng@example.invalid"
         }
       },
       "sclUndoSnapshot": {
@@ -367,9 +367,7 @@
           "ref": "LMX-SCL-2026-003",
           "issuedAt": "2026-09-08T11:36:47.192Z",
           "action": "issued",
-          "at": "2026-09-08T11:36:47.192Z",
-          "seq": 3,
-          "year": 2026
+          "at": "2026-09-08T11:36:47.192Z"
         }
       ],
       "activePhaseId": "mid-phase-done",
@@ -380,14 +378,14 @@
     {
       "id": "proj-sample-archived-scf",
       "clientName": "SAMPLE Client Delta",
-      "projectName": "SAMPLE â Archived Carport (issued)",
+      "projectName": "SAMPLE Ã¢ÂÂ Archived Carport (issued)",
       "projectCode": "DEMO-ARCH-001",
       "salesOrderNumber": "SO-DEMO-1999",
       "poNumber": "PO-ARCH-88",
       "popReference": "POP-ARCH-9",
       "invoiceNumber": "INV-ARCH-001",
       "address": "Unit 9 Fiction Park, Centurion (SAMPLE)",
-      "contactPerson": "Morgan Owner ÃÂ· +27 83 000 0004",
+      "contactPerson": "Morgan Owner ÃÂÃÂ· +27 83 000 0004",
       "projectType": "Carport",
       "structureTypes": [
         "Custom"
@@ -397,7 +395,7 @@
         "CRP-002"
       ],
       "customFields": {
-        "Note": "Fictional SAMPLE Ã¢ÂÂ SCF already issued"
+        "Note": "Fictional SAMPLE ÃÂ¢ÃÂÃÂ SCF already issued"
       },
       "phases": [
         {
@@ -449,14 +447,14 @@
         "issuedAt": "2026-08-20T09:00:00.000Z",
         "dateLabel": "20/08/2026",
         "clientName": "SAMPLE Client Delta",
-        "projectName": "SAMPLE Ã¢ÂÂ Archived Carport (issued)",
+        "projectName": "SAMPLE ÃÂ¢ÃÂÃÂ Archived Carport (issued)",
         "projectCode": "DEMO-ARCH-001",
         "projectType": "Carport",
         "structureTypes": [
           "Carport"
         ],
         "address": "Unit 9 Fiction Park, Centurion (SAMPLE)",
-        "contactPerson": "Morgan Owner ÃÂ· +27 83 000 0004",
+        "contactPerson": "Morgan Owner ÃÂÃÂ· +27 83 000 0004",
         "invoiceNumber": "INV-ARCH-001",
         "poNumber": "PO-ARCH-88",
         "popReference": "POP-ARCH-9",
@@ -467,9 +465,9 @@
         "engineer": {
           "name": "Demo Pr. Eng. (SAMPLE)",
           "ecsaNo": "ECSA-DEMO-00000",
-          "business": "Lumax ENERGY (PTY) Ltd Ã¢ÂÂ SAMPLE",
+          "business": "Lumax ENERGY (PTY) Ltd ÃÂ¢ÃÂÃÂ SAMPLE",
           "address": "Demo Corporate Park North, Midrand 1685",
-          "contact": "+27(0) 00 000 0000 ÃÂ· demo-eng@example.invalid"
+          "contact": "+27(0) 00 000 0000 ÃÂÃÂ· demo-eng@example.invalid"
         }
       },
       "sclUndoSnapshot": null,
@@ -482,14 +480,14 @@
     {
       "id": "proj-sample-demo-001",
       "clientName": "Demo",
-      "projectName": "SAMPLE â Demo Solar Array",
+      "projectName": "SAMPLE Ã¢ÂÂ Demo Solar Array",
       "projectCode": "DEMO-001",
       "salesOrderNumber": "SO-DEMO-1001",
       "poNumber": "PO-DEMO-1001",
       "popReference": "POP-DEMO-1001",
       "invoiceNumber": "INV-DEMO-1001",
       "address": "Fictional Industrial Park 201",
-      "contactPerson": "Alex Engineer ÃÂ· +27 60 000 0005",
+      "contactPerson": "Alex Engineer ÃÂÃÂ· +27 60 000 0005",
       "projectType": "PV GM (SteelCore)",
       "structureTypes": [
         "GM Steel"
@@ -874,7 +872,7 @@
     {
       "id": "task-standalone-rdn-1",
       "projectId": null,
-      "title": "SAMPLE RDN Ã¢ÂÂ Clarification on pile spacing",
+      "title": "SAMPLE RDN ÃÂ¢ÃÂÃÂ Clarification on pile spacing",
       "description": "Fictional RDN for demo inbox / standalone workflow.",
       "type": "rdn",
       "statusId": "status-in-check",
@@ -925,7 +923,7 @@
       "title": "Rivaal's House",
       "description": "",
       "type": "eng_task",
-      "statusId": "status-doing",
+      "statusId": "status-done",
       "assignee": "Rivaal",
       "priority": "high",
       "dueDate": "2026-09-11",
@@ -941,7 +939,7 @@
       "rev": "",
       "discipline": "Structural Eng.",
       "createdAt": "2026-09-08T12:01:52.272Z",
-      "updatedAt": "2026-09-08T12:01:52.272Z"
+      "updatedAt": "2026-09-08T12:10:30.026Z"
     },
     {
       "id": "task-vlx52c8ge2va",
@@ -955,7 +953,7 @@
       "dueDate": null,
       "phaseId": "phase-vv4z2p21c174",
       "blockedReason": "",
-      "doneDate": null,
+      "doneDate": "2026-09-08",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -965,7 +963,7 @@
       "rev": "",
       "discipline": "Geotechnical Eng.",
       "createdAt": "2026-09-08T12:02:39.238Z",
-      "updatedAt": "2026-09-08T12:02:39.238Z"
+      "updatedAt": "2026-09-08T12:10:08.509Z"
     },
     {
       "id": "task-fgr37fkgevxc",
@@ -979,7 +977,7 @@
       "dueDate": null,
       "phaseId": "phase-d1m3j81hc174",
       "blockedReason": "",
-      "doneDate": null,
+      "doneDate": "2026-09-08",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -989,7 +987,7 @@
       "rev": "",
       "discipline": "Structural Eng.",
       "createdAt": "2026-09-08T12:03:16.896Z",
-      "updatedAt": "2026-09-08T12:03:16.896Z"
+      "updatedAt": "2026-09-08T12:10:10.410Z"
     },
     {
       "id": "task-0rl5w2twfx7f",
@@ -997,13 +995,13 @@
       "title": "Site Inspect nr.6",
       "description": "",
       "type": "site_visit",
-      "statusId": "status-blocked",
+      "statusId": "status-doing",
       "assignee": "Rivaal",
       "priority": "high",
       "dueDate": null,
       "phaseId": "phase-v4746sjdc174",
       "blockedReason": "Because",
-      "doneDate": null,
+      "doneDate": "2026-09-08",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -1013,7 +1011,7 @@
       "rev": "",
       "discipline": "Structural",
       "createdAt": "2026-09-08T12:04:05.211Z",
-      "updatedAt": "2026-09-08T12:04:11.883Z"
+      "updatedAt": "2026-09-08T12:10:09.454Z"
     }
   ]
 }
