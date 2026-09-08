@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-08T11:29:43.628Z",
+  "updatedAt": "2026-09-08T11:35:28.484Z",
   "settings": {
     "taskStatuses": [
       {
@@ -78,7 +78,7 @@
         "name": "Other"
       }
     ],
-    "myAssignee": "",
+    "myAssignee": "Lucian du Plessis",
     "projectTypes": [
       "Carport",
       "Ground mount",
@@ -103,8 +103,8 @@
     "engineerDefaults": {
       "name": "Demo Pr. Eng. (SAMPLE)",
       "ecsaNo": "ECSA-DEMO-00000",
-      "business": "Lumax ENERGY (PTY) Ltd â SAMPLE",
-      "address": "Demo Corporate Park North, Midrand 1685",
+      "business": "Lumax ENERGY (PTY) Ltd",
+      "address": "Corporate Park North, Midrand 1685",
       "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
     },
     "scfYear": 2026,
@@ -185,7 +185,7 @@
       "activePhaseId": "ready-phase-done",
       "archived": false,
       "createdAt": "2026-07-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T09:40:30.120Z"
+      "updatedAt": "2026-09-08T11:33:23.012Z"
     },
     {
       "id": "proj-sample-missing-inv",
