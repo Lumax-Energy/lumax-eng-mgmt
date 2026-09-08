@@ -19,8 +19,49 @@
     { id: "phase-design", name: "Design" },
     { id: "phase-check", name: "Check" },
     { id: "phase-drawings", name: "Drawings" },
+    { id: "phase-site-investigation", name: "Site investigation" },
     { id: "phase-site", name: "Site/Construction support" },
     { id: "phase-closeout", name: "Close-out" },
+  ];
+
+  /** Extensible dashboard / projects filter chips. Add entries here for new views. */
+  const DASHBOARD_VIEWS = [
+    {
+      id: "clients",
+      label: "Clients",
+      kind: "browse-clients",
+      hint: "Unique clients from projects",
+    },
+    {
+      id: "assignees",
+      label: "Engineering assignees",
+      kind: "browse-assignees",
+      hint: "Unique assignees from all tasks",
+    },
+    {
+      id: "eng-signoff",
+      label: "Eng sign-off",
+      kind: "filter-projects",
+      hint: "Projects with engineering sign-off",
+    },
+    {
+      id: "conformance",
+      label: "Has conformance",
+      kind: "filter-projects",
+      hint: "Pending or approved (not none)",
+    },
+    {
+      id: "site-investigation",
+      label: "Site investigation",
+      kind: "filter-projects",
+      hint: "Active / current phase is Site investigation",
+    },
+  ];
+
+  const CONFORMANCE_STATUSES = [
+    { id: "none", name: "None" },
+    { id: "pending", name: "Pending" },
+    { id: "approved", name: "Approved" },
   ];
 
   const DEFAULT_STATUSES = [
@@ -52,7 +93,9 @@
     selectedPhaseId: "all",
     showArchived: false,
     search: "",
-    taskFilters: { type: "", statusId: "", assignee: "", overdueOnly: false, projectId: "" },
+    taskFilters: { type: "", statusId: "", assignee: "", overdueOnly: false, projectId: "", client: "" },
+    projectFilters: { client: "", dashboardView: null },
+    dashboardView: null, // id from DASHBOARD_VIEWS, or null
     tasksMode: "list", // list | board
     settings: loadBrowserSettings(),
     githubUser: null,
@@ -210,6 +253,10 @@
       if (f.assignee && (t.assignee || "").toLowerCase() !== f.assignee.toLowerCase()) return false;
       if (f.projectId === "__standalone__" && t.projectId) return false;
       if (f.projectId && f.projectId !== "__standalone__" && t.projectId !== f.projectId) return false;
+      if (f.client) {
+        const p = t.projectId ? getProject(t.projectId) : null;
+        if (!p || (p.clientName || "").toLowerCase() !== f.client.toLowerCase()) return false;
+      }
       if (f.overdueOnly && !isOverdue(t)) return false;
       if (q) {
         const p = t.projectId ? getProject(t.projectId) : null;
@@ -244,6 +291,92 @@
   }
   function projectAtRisk(project) {
     return blockedCount(project) > 0 || overdueCount(project) > 3;
+  }
+  function normalizeConformanceStatus(v) {
+    const s = String(v || "none").toLowerCase();
+    if (s === "pending" || s === "approved") return s;
+    return "none";
+  }
+  function hasConformance(project) {
+    const s = normalizeConformanceStatus(project && project.conformanceStatus);
+    return s === "pending" || s === "approved";
+  }
+  function isSiteInvestigationName(name) {
+    return String(name || "")
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .trim()
+      .includes("site investigation");
+  }
+  /** Current phase = first phase with open tasks, else first phase. */
+  function projectCurrentPhase(project) {
+    if (!project || !Array.isArray(project.phases) || !project.phases.length) return null;
+    for (let i = 0; i < project.phases.length; i++) {
+      const ph = project.phases[i];
+      const openInPhase = projectTasks(project.id).some(
+        (t) => t.phaseId === ph.id && statusIsOpen(t.statusId)
+      );
+      if (openInPhase) return ph;
+    }
+    return project.phases[0];
+  }
+  function projectInSiteInvestigation(project) {
+    if (!project) return false;
+    const cur = projectCurrentPhase(project);
+    if (cur && isSiteInvestigationName(cur.name)) return true;
+    // Also match if any phase named Site investigation has open tasks (active phase)
+    return (project.phases || []).some((ph) => {
+      if (!isSiteInvestigationName(ph.name)) return false;
+      return projectTasks(project.id).some((t) => t.phaseId === ph.id && statusIsOpen(t.statusId));
+    });
+  }
+  function uniqueClients() {
+    const set = new Set();
+    (state.data.projects || []).forEach((p) => {
+      const c = (p.clientName || "").trim();
+      if (c) set.add(c);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }
+  function uniqueAssignees() {
+    const set = new Set();
+    (state.data.tasks || []).forEach((t) => {
+      const a = (t.assignee || "").trim();
+      if (a) set.add(a);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }
+  function getDashboardView(id) {
+    return DASHBOARD_VIEWS.find((v) => v.id === id) || null;
+  }
+  function projectsMatchingFilters(extra) {
+    const q = (state.search || "").trim().toLowerCase();
+    const clientFilter = (extra && extra.client !== undefined ? extra.client : state.projectFilters.client) || "";
+    const viewId = extra && extra.dashboardView !== undefined ? extra.dashboardView : state.dashboardView;
+    let projects = (state.data.projects || []).filter((p) => state.showArchived || !p.archived);
+    if (clientFilter) {
+      projects = projects.filter((p) => (p.clientName || "").toLowerCase() === clientFilter.toLowerCase());
+    }
+    if (viewId === "eng-signoff") {
+      projects = projects.filter((p) => !!p.engineeringSignOff);
+    } else if (viewId === "conformance") {
+      projects = projects.filter((p) => hasConformance(p));
+    } else if (viewId === "site-investigation") {
+      projects = projects.filter((p) => projectInSiteInvestigation(p));
+    }
+    if (q) {
+      projects = projects.filter((p) => {
+        const hay = [p.clientName, p.projectCode, p.salesOrderNumber, p.projectName].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    projects.sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || ""));
+    return projects;
+  }
+  function conformanceLabel(status) {
+    const s = normalizeConformanceStatus(status);
+    const found = CONFORMANCE_STATUSES.find((x) => x.id === s);
+    return found ? found.name : s;
   }
 
   // ---------- Normalize / migrate ----------
@@ -320,6 +453,7 @@
     } else {
       phases = DEFAULT_PHASES.map((ph) => ({ id: uid("phase"), name: ph.name }));
     }
+    const engineeringSignOff = !!p.engineeringSignOff;
     return {
       id: p.id || uid("proj"),
       clientName: p.clientName || "",
@@ -329,6 +463,10 @@
       drawingNumbers: Array.isArray(p.drawingNumbers) ? p.drawingNumbers.slice() : [],
       customFields: p.customFields && typeof p.customFields === "object" ? { ...p.customFields } : {},
       phases,
+      engineeringSignOff,
+      engineeringSignOffAt: engineeringSignOff ? p.engineeringSignOffAt || null : p.engineeringSignOffAt || null,
+      engineeringSignOffBy: p.engineeringSignOffBy || "",
+      conformanceStatus: normalizeConformanceStatus(p.conformanceStatus),
       archived: !!p.archived,
       createdAt: p.createdAt || nowIso(),
       updatedAt: p.updatedAt || nowIso(),
@@ -623,6 +761,7 @@
         state.taskFilters.assignee ||
         state.taskFilters.overdueOnly ||
         state.taskFilters.projectId ||
+        state.taskFilters.client ||
         (state.search || "").trim())
     );
     const filteredTasks = filterActive ? allTasksFiltered() : allTasks.slice();
@@ -792,12 +931,18 @@
       .sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || ""))
       .map((p) => {
         const pts = projectTasks(p.id);
+        const cur = projectCurrentPhase(p);
         return {
           Code: p.projectCode,
           Name: p.projectName,
           Client: p.clientName,
           "Sales order": p.salesOrderNumber,
           "Phase count": (p.phases || []).length,
+          "Current phase": cur ? cur.name : "",
+          "Eng sign-off": p.engineeringSignOff ? "yes" : "no",
+          "Eng sign-off at": p.engineeringSignOffAt || "",
+          "Eng sign-off by": p.engineeringSignOffBy || "",
+          Conformance: conformanceLabel(p.conformanceStatus),
           "Open tasks": pts.filter((t) => statusIsOpen(t.statusId)).length,
           Overdue: pts.filter((t) => isOverdue(t)).length,
           Blocked: pts.filter((t) => statusIsBlocked(t.statusId)).length,
@@ -905,7 +1050,7 @@
     // 7 RDN 8 Design Checks 9 Drawings 10 Eng Tasks 11 Summary
     appendSheet(wb, "Dashboard", XLSX.utils.aoa_to_sheet(dash));
     appendSheet(wb, "All Tasks", sheetFromRows(allTaskRows, emptyHeaders));
-    appendSheet(wb, "Projects", sheetFromRows(projRows, ["Code", "Name", "Client"]));
+    appendSheet(wb, "Projects", sheetFromRows(projRows, ["Code", "Name", "Client", "Eng sign-off", "Conformance"]));
     appendSheet(wb, "By Assignee", sheetFromRows(byAssigneeRows, emptyHeaders));
     appendSheet(wb, "By Client", sheetFromRows(byClientRows, emptyHeaders));
     appendSheet(wb, "By Project", sheetFromRows(byProjectRows, emptyHeaders));
@@ -950,8 +1095,204 @@
   }
 
   // ---------- Dashboard ----------
+  function renderViewChips(activeId, opts) {
+    opts = opts || {};
+    const showClear = !!(activeId || (state.projectFilters && state.projectFilters.client));
+    return (
+      `<div class="view-chips" role="toolbar" aria-label="Dashboard views">` +
+      DASHBOARD_VIEWS.map((v) => {
+        const active = activeId === v.id;
+        return (
+          `<button type="button" class="view-chip${active ? " active" : ""}" data-dash-view="${escapeHtml(v.id)}" title="${escapeHtml(v.hint || "")}">` +
+          `${escapeHtml(v.label)}</button>`
+        );
+      }).join("") +
+      (showClear
+        ? `<button type="button" class="view-chip clear" data-dash-view="" title="Clear view filters">Clear</button>`
+        : "") +
+      (state.projectFilters.client
+        ? `<span class="view-chip-meta">Client: <strong>${escapeHtml(state.projectFilters.client)}</strong></span>`
+        : "") +
+      `</div>`
+    );
+  }
+
+  function bindViewChips(root) {
+    root.querySelectorAll("[data-dash-view]").forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.dataset.dashView || null;
+        activateDashboardView(id);
+      };
+    });
+  }
+
+  function activateDashboardView(id) {
+    const def = id ? getDashboardView(id) : null;
+    if (!id) {
+      state.dashboardView = null;
+      state.projectFilters.client = "";
+      state.projectFilters.dashboardView = null;
+      render();
+      return;
+    }
+    if (!def) return;
+
+    if (def.kind === "browse-clients" || def.kind === "browse-assignees") {
+      state.dashboardView = id;
+      state.projectFilters.dashboardView = null;
+      // Browse lists live on the dashboard
+      if (state.view !== "dashboard") setView("dashboard");
+      else render();
+      return;
+    }
+
+    if (def.kind === "filter-projects") {
+      // Toggle same chip off
+      if (state.dashboardView === id) {
+        state.dashboardView = null;
+        state.projectFilters.dashboardView = null;
+      } else {
+        state.dashboardView = id;
+        state.projectFilters.dashboardView = id;
+      }
+      if (state.view === "dashboard" || state.view === "projects") render();
+      else setView("projects");
+      return;
+    }
+  }
+
   function renderDashboard() {
     const root = document.getElementById("view-dashboard");
+    const viewDef = state.dashboardView ? getDashboardView(state.dashboardView) : null;
+
+    // Browse / filtered view panels take over when a chip is active
+    if (viewDef && viewDef.kind === "browse-clients") {
+      const clients = uniqueClients();
+      root.innerHTML =
+        renderViewChips(state.dashboardView) +
+        `<div class="dash-view-panel">` +
+        `<h2>Clients <span class="stat-sub">(${clients.length})</span></h2>` +
+        `<p class="hint">Click a client to open Projects filtered by that client.</p>` +
+        `<div class="browse-chip-grid">` +
+        (clients.length
+          ? clients
+              .map(
+                (c) =>
+                  `<button type="button" class="browse-card" data-client="${escapeHtml(c)}">` +
+                  `<div class="browse-card-title">${escapeHtml(c)}</div>` +
+                  `<div class="stat-sub">${(state.data.projects || []).filter((p) => (p.clientName || "") === c && !p.archived).length} active project(s)</div>` +
+                  `</button>`
+              )
+              .join("")
+          : `<div class="empty-state">No clients yet</div>`) +
+        `</div></div>`;
+      bindViewChips(root);
+      root.querySelectorAll("[data-client]").forEach((btn) => {
+        btn.onclick = () => {
+          state.projectFilters.client = btn.dataset.client;
+          state.dashboardView = null;
+          state.projectFilters.dashboardView = null;
+          state.taskFilters.client = btn.dataset.client;
+          setView("projects");
+        };
+      });
+      return;
+    }
+
+    if (viewDef && viewDef.kind === "browse-assignees") {
+      const assignees = uniqueAssignees();
+      root.innerHTML =
+        renderViewChips(state.dashboardView) +
+        `<div class="dash-view-panel">` +
+        `<h2>Engineering assignees <span class="stat-sub">(${assignees.length})</span></h2>` +
+        `<p class="hint">Click an assignee to open Tasks filtered by that person.</p>` +
+        `<div class="browse-chip-grid">` +
+        (assignees.length
+          ? assignees
+              .map((a) => {
+                const openN = (state.data.tasks || []).filter(
+                  (t) => (t.assignee || "") === a && statusIsOpen(t.statusId)
+                ).length;
+                return (
+                  `<button type="button" class="browse-card" data-assignee="${escapeHtml(a)}">` +
+                  `<div class="browse-card-title">${escapeHtml(a)}</div>` +
+                  `<div class="stat-sub">${openN} open task(s)</div>` +
+                  `</button>`
+                );
+              })
+              .join("")
+          : `<div class="empty-state">No assignees yet</div>`) +
+        `</div></div>`;
+      bindViewChips(root);
+      root.querySelectorAll("[data-assignee]").forEach((btn) => {
+        btn.onclick = () => {
+          state.taskFilters = {
+            type: "",
+            statusId: "",
+            assignee: btn.dataset.assignee,
+            overdueOnly: false,
+            projectId: "",
+            client: "",
+          };
+          state.dashboardView = null;
+          setView("tasks");
+        };
+      });
+      return;
+    }
+
+    if (viewDef && viewDef.kind === "filter-projects") {
+      const projects = projectsMatchingFilters();
+      root.innerHTML =
+        renderViewChips(state.dashboardView) +
+        `<div class="dash-view-panel">` +
+        `<h2>${escapeHtml(viewDef.label)} <span class="stat-sub">(${projects.length})</span></h2>` +
+        `<p class="hint">${escapeHtml(viewDef.hint || "")}` +
+        (viewDef.id === "conformance"
+          ? ' — <em>Has conformance</em> means status is <strong>pending</strong> or <strong>approved</strong> (not none).'
+          : "") +
+        (viewDef.id === "site-investigation"
+          ? " — Current phase = first phase with open tasks, else first phase."
+          : "") +
+        `</p>` +
+        `<div class="project-grid" id="dash-filtered-projects"></div>` +
+        `<div class="dash-view-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-open-filtered-projects">Open in Projects</button></div>` +
+        `</div>`;
+      const grid = root.querySelector("#dash-filtered-projects");
+      if (!projects.length) {
+        grid.innerHTML = '<div class="empty-state">No projects match this view.</div>';
+      } else {
+        grid.innerHTML = projects
+          .map((p) => {
+            const cur = projectCurrentPhase(p);
+            return (
+              `<article class="project-card${p.archived ? " archived" : ""}${projectAtRisk(p) ? " at-risk" : ""}" data-id="${escapeHtml(p.id)}" tabindex="0" role="button">` +
+              `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
+              `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
+              `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}</div>` +
+              (p.engineeringSignOff ? '<span class="pill signoff">Eng sign-off</span> ' : "") +
+              (hasConformance(p) ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span> ` : "") +
+              (cur ? `<div class="stat-sub">Current: ${escapeHtml(cur.name)}</div>` : "") +
+              `</article>`
+            );
+          })
+          .join("");
+        grid.querySelectorAll(".project-card").forEach((card) => {
+          card.addEventListener("click", () => openProject(card.dataset.id));
+          card.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openProject(card.dataset.id);
+            }
+          });
+        });
+      }
+      bindViewChips(root);
+      const openBtn = root.querySelector("#btn-open-filtered-projects");
+      if (openBtn) openBtn.onclick = () => setView("projects");
+      return;
+    }
+
     const tasks = state.data.tasks || [];
     const statuses = getStatuses();
     const open = tasks.filter((t) => statusIsOpen(t.statusId));
@@ -1002,12 +1343,17 @@
       .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
       .slice(0, 8);
 
+    const signOffN = (state.data.projects || []).filter((p) => !p.archived && p.engineeringSignOff).length;
+    const confN = (state.data.projects || []).filter((p) => !p.archived && hasConformance(p)).length;
+    const siteN = (state.data.projects || []).filter((p) => !p.archived && projectInSiteInvestigation(p)).length;
+
     root.innerHTML =
+      renderViewChips(state.dashboardView) +
       `<div class="dash-grid">` +
       `<div class="dash-card span-3"><h3>Open tasks</h3><div class="stat-big">${open.length}</div><div class="stat-sub">${overdue.length} overdue · ${due7.length} due in 7d</div></div>` +
       `<div class="dash-card span-3"><h3>Standalone</h3><div class="stat-big">${tasks.filter((t) => !t.projectId && statusIsOpen(t.statusId)).length}</div><div class="stat-sub">open without project</div></div>` +
       `<div class="dash-card span-3"><h3>Blocked</h3><div class="stat-big">${tasks.filter((t) => statusIsBlocked(t.statusId)).length}</div><div class="stat-sub">need unblock</div></div>` +
-      `<div class="dash-card span-3"><h3>Active projects</h3><div class="stat-big">${(state.data.projects || []).filter((p) => !p.archived).length}</div><div class="stat-sub">${risk.length} at risk</div></div>` +
+      `<div class="dash-card span-3"><h3>Active projects</h3><div class="stat-big">${(state.data.projects || []).filter((p) => !p.archived).length}</div><div class="stat-sub">${risk.length} at risk · ${signOffN} sign-off · ${confN} conformance · ${siteN} site inv.</div></div>` +
       `<div class="dash-card span-6"><h3>Open by status</h3><div class="status-bars">` +
       byStatus
         .map((x) => {
@@ -1075,21 +1421,22 @@
         .join("") +
       `</ul></div></div>`;
 
+    bindViewChips(root);
     root.querySelectorAll(".dash-filter-status").forEach((btn) => {
       btn.onclick = () => {
-        state.taskFilters = { type: "", statusId: btn.dataset.status, assignee: "", overdueOnly: false, projectId: "" };
+        state.taskFilters = { type: "", statusId: btn.dataset.status, assignee: "", overdueOnly: false, projectId: "", client: "" };
         setView("tasks");
       };
     });
     root.querySelectorAll(".dash-filter-type").forEach((btn) => {
       btn.onclick = () => {
-        state.taskFilters = { type: btn.dataset.type, statusId: "", assignee: "", overdueOnly: false, projectId: "" };
+        state.taskFilters = { type: btn.dataset.type, statusId: "", assignee: "", overdueOnly: false, projectId: "", client: "" };
         setView("tasks");
       };
     });
     root.querySelectorAll(".dash-filter-assignee").forEach((btn) => {
       btn.onclick = () => {
-        state.taskFilters = { type: "", statusId: "", assignee: btn.dataset.assignee, overdueOnly: true, projectId: "" };
+        state.taskFilters = { type: "", statusId: "", assignee: btn.dataset.assignee, overdueOnly: true, projectId: "", client: "" };
         setView("tasks");
       };
     });
@@ -1103,26 +1450,81 @@
 
   // ---------- Projects ----------
   function renderProjects() {
-    const q = (state.search || "").trim().toLowerCase();
-    let projects = state.data.projects.filter((p) => state.showArchived || !p.archived);
-    if (q) {
-      projects = projects.filter((p) => {
-        const hay = [p.clientName, p.projectCode, p.salesOrderNumber, p.projectName].join(" ").toLowerCase();
-        return hay.includes(q);
-      });
+    const root = document.getElementById("view-projects");
+    const toolbar = root.querySelector(".toolbar");
+    // Ensure chips row exists above the grid
+    let chipsHost = document.getElementById("projects-view-chips");
+    if (!chipsHost) {
+      chipsHost = document.createElement("div");
+      chipsHost.id = "projects-view-chips";
+      root.insertBefore(chipsHost, toolbar ? toolbar.nextSibling : root.firstChild);
     }
-    projects.sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || ""));
+    // Keep filter-project chips in sync with dashboardViews (browse chips still useful)
+    const filterViews = DASHBOARD_VIEWS.filter((v) => v.kind === "filter-projects" || v.kind === "browse-clients");
+    const activeId = state.dashboardView;
+    chipsHost.innerHTML =
+      `<div class="view-chips" role="toolbar" aria-label="Project views">` +
+      filterViews
+        .map((v) => {
+          const active = activeId === v.id || (v.id === "clients" && !!state.projectFilters.client);
+          return `<button type="button" class="view-chip${active ? " active" : ""}" data-proj-view="${escapeHtml(v.id)}" title="${escapeHtml(v.hint || "")}">${escapeHtml(v.label)}</button>`;
+        })
+        .join("") +
+      (activeId || state.projectFilters.client
+        ? `<button type="button" class="view-chip clear" data-proj-view="" title="Clear filters">Clear</button>`
+        : "") +
+      (state.projectFilters.client
+        ? `<span class="view-chip-meta">Client: <strong>${escapeHtml(state.projectFilters.client)}</strong></span>`
+        : "") +
+      (activeId === "conformance"
+        ? `<span class="view-chip-meta hint-inline">Has conformance = pending | approved</span>`
+        : "") +
+      `</div>`;
+
+    chipsHost.querySelectorAll("[data-proj-view]").forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.dataset.projView || "";
+        if (!id) {
+          state.dashboardView = null;
+          state.projectFilters.client = "";
+          state.projectFilters.dashboardView = null;
+          state.taskFilters.client = "";
+          renderProjects();
+          return;
+        }
+        const def = getDashboardView(id);
+        if (!def) return;
+        if (def.kind === "browse-clients") {
+          // On projects page: cycle client via prompt-less browse — jump to dashboard clients view
+          state.dashboardView = "clients";
+          setView("dashboard");
+          return;
+        }
+        if (state.dashboardView === id) {
+          state.dashboardView = null;
+          state.projectFilters.dashboardView = null;
+        } else {
+          state.dashboardView = id;
+          state.projectFilters.dashboardView = id;
+        }
+        renderProjects();
+      };
+    });
+
+    let projects = projectsMatchingFilters();
 
     const grid = document.getElementById("project-grid");
     if (!projects.length) {
       const hasAny = (state.data.projects || []).length > 0;
       grid.innerHTML =
         '<div class="empty-state">' +
-        (q
+        (state.search
           ? "No projects match this search."
-          : hasAny
-            ? "No projects to show. Enable Show archived, or create a new project."
-            : "No projects yet. Create one, Load from GitHub, or Import JSON.") +
+          : state.dashboardView || state.projectFilters.client
+            ? "No projects match this view filter."
+            : hasAny
+              ? "No projects to show. Enable Show archived, or create a new project."
+              : "No projects yet. Create one, Load from GitHub, or Import JSON.") +
         "</div>";
       return;
     }
@@ -1131,6 +1533,7 @@
         const open = openTaskCount(p);
         const blocked = blockedCount(p);
         const overdue = overdueCount(p);
+        const cur = projectCurrentPhase(p);
         return (
           `<article class="project-card${p.archived ? " archived" : ""}${projectAtRisk(p) ? " at-risk" : ""}" data-id="${escapeHtml(p.id)}" tabindex="0" role="button">` +
           `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
@@ -1138,6 +1541,9 @@
           `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}</div>` +
           (isSample(p) ? '<span class="sample-tag">SAMPLE</span>' : "") +
           (p.archived ? '<span class="sample-tag" style="background:#eee;color:#555">ARCHIVED</span>' : "") +
+          (p.engineeringSignOff ? '<span class="pill signoff">Eng sign-off</span>' : "") +
+          (hasConformance(p) ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span>` : "") +
+          (cur ? `<div class="stat-sub">Phase: ${escapeHtml(cur.name)}</div>` : "") +
           `<div class="task-summary">` +
           `<span class="pill open">${open} open</span>` +
           (blocked ? `<span class="pill blocked">${blocked} blocked</span>` : "") +
@@ -1201,6 +1607,16 @@
       `<span><strong>Client:</strong> ${escapeHtml(p.clientName)}</span>` +
       `<span><strong>Code:</strong> ${escapeHtml(p.projectCode)}</span>` +
       `<span><strong>SO:</strong> ${escapeHtml(p.salesOrderNumber)}</span>` +
+      `<span><strong>Eng sign-off:</strong> ${p.engineeringSignOff ? "Yes" : "No"}` +
+      (p.engineeringSignOff && (p.engineeringSignOffBy || p.engineeringSignOffAt)
+        ? ` (${escapeHtml([p.engineeringSignOffBy, p.engineeringSignOffAt].filter(Boolean).join(" · "))})`
+        : "") +
+      `</span>` +
+      `<span><strong>Conformance:</strong> ${escapeHtml(conformanceLabel(p.conformanceStatus))}</span>` +
+      (() => {
+        const cur = projectCurrentPhase(p);
+        return cur ? `<span><strong>Current phase:</strong> ${escapeHtml(cur.name)}</span>` : "";
+      })() +
       (p.archived ? "<span><strong>Status:</strong> Archived</span>" : "") +
       `</div>` +
       `<div class="drawings-list"><strong>Drawings:</strong> ${drawings}</div>` +
@@ -1500,6 +1916,22 @@
         `</div>` +
         `<div class="form-group"><label>Project name</label><input id="pf-name" value="${escapeHtml(p ? p.projectName : "")}" /></div>` +
         `<div class="form-group"><label>Sales order number</label><input id="pf-so" value="${escapeHtml(p ? p.salesOrderNumber : "")}" /></div>` +
+        `<div class="form-row">` +
+        `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="pf-eng-signoff"${p && p.engineeringSignOff ? " checked" : ""}/> Engineering sign-off</label>` +
+        `<p class="hint">Toggle when engineering has signed off this project.</p></div>` +
+        `<div class="form-group"><label>Conformance</label>` +
+        `<select id="pf-conformance">` +
+        CONFORMANCE_STATUSES.map((s) => {
+          const cur = p ? normalizeConformanceStatus(p.conformanceStatus) : "none";
+          return `<option value="${s.id}"${cur === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`;
+        }).join("") +
+        `</select>` +
+        `<p class="hint">“Has conformance” views include <strong>pending</strong> and <strong>approved</strong>.</p></div>` +
+        `</div>` +
+        `<div class="form-row" id="pf-signoff-extra">` +
+        `<div class="form-group"><label>Sign-off at</label><input type="date" id="pf-signoff-at" value="${escapeHtml(p && p.engineeringSignOffAt ? String(p.engineeringSignOffAt).slice(0, 10) : "")}" /></div>` +
+        `<div class="form-group"><label>Sign-off by</label><input id="pf-signoff-by" value="${escapeHtml(p ? p.engineeringSignOffBy || "" : "")}" placeholder="Name" /></div>` +
+        `</div>` +
         `<div class="form-group"><label>Drawing numbers</label>` +
         `<div class="dyn-list" id="pf-drawings"></div>` +
         `<button type="button" class="btn btn-secondary btn-sm" id="pf-add-drawing" style="margin-top:0.4rem">+ Drawing</button></div>` +
@@ -1507,7 +1939,7 @@
         `<div class="dyn-list" id="pf-customs"></div>` +
         `<button type="button" class="btn btn-secondary btn-sm" id="pf-add-custom" style="margin-top:0.4rem">+ Field</button></div>` +
         (!isEdit
-          ? `<p class="hint">New projects get default phases: Intake → Concept → Design → Check → Drawings → Site/Construction support → Close-out.</p>`
+          ? `<p class="hint">New projects get default phases: Intake → Concept → Design → Check → Drawings → Site investigation → Site/Construction support → Close-out.</p>`
           : "") +
         `<div class="panel-actions">` +
         (isEdit ? `<button type="button" class="btn btn-danger" id="pf-delete" style="margin-right:auto">Delete</button>` : "") +
@@ -1542,6 +1974,13 @@
     document.getElementById("pf-add-drawing").onclick = () => addDrawingRow("");
     document.getElementById("pf-add-custom").onclick = () => addCustomRow("", "");
     document.getElementById("pf-cancel").onclick = closeOverlay;
+    function syncSignOffExtra() {
+      const on = document.getElementById("pf-eng-signoff").checked;
+      const wrap = document.getElementById("pf-signoff-extra");
+      if (wrap) wrap.style.opacity = on ? "1" : "0.55";
+    }
+    document.getElementById("pf-eng-signoff").onchange = syncSignOffExtra;
+    syncSignOffExtra();
 
     if (isEdit) {
       document.getElementById("pf-delete").onclick = () => {
@@ -1573,9 +2012,29 @@
         const v = row.querySelector(".pf-cf-val").value.trim();
         if (k) customFields[k] = v;
       });
+      const engineeringSignOff = document.getElementById("pf-eng-signoff").checked;
+      let engineeringSignOffAt = document.getElementById("pf-signoff-at").value || null;
+      let engineeringSignOffBy = document.getElementById("pf-signoff-by").value.trim();
+      if (engineeringSignOff && !engineeringSignOffAt) engineeringSignOffAt = todayStr();
+      if (!engineeringSignOff) {
+        // Keep historical values but off flag is authoritative for views
+      }
+      const conformanceStatus = normalizeConformanceStatus(document.getElementById("pf-conformance").value);
 
       if (isEdit) {
-        Object.assign(p, { clientName, projectName, projectCode, salesOrderNumber, drawingNumbers, customFields, updatedAt: nowIso() });
+        Object.assign(p, {
+          clientName,
+          projectName,
+          projectCode,
+          salesOrderNumber,
+          drawingNumbers,
+          customFields,
+          engineeringSignOff,
+          engineeringSignOffAt,
+          engineeringSignOffBy,
+          conformanceStatus,
+          updatedAt: nowIso(),
+        });
       } else {
         const np = normalizeProject({
           id: uid("proj"),
@@ -1585,6 +2044,10 @@
           salesOrderNumber,
           drawingNumbers,
           customFields,
+          engineeringSignOff,
+          engineeringSignOffAt,
+          engineeringSignOffBy,
+          conformanceStatus,
           phases: DEFAULT_PHASES.map((ph) => ({ id: uid("phase"), name: ph.name })),
           archived: false,
           createdAt: nowIso(),

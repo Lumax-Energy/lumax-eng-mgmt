@@ -334,3 +334,76 @@ a { color: var(--accent); }
   .last-sync { display: none; }
   .main { padding: 0.75rem; }
 }
+
+
+/* Dashboard / project view chips */
+.view-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.view-chip {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--muted);
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.view-chip:hover { border-color: var(--accent); color: var(--navy); }
+.view-chip.active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.view-chip.clear {
+  background: transparent;
+  border-style: dashed;
+  font-weight: 500;
+}
+.view-chip-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-left: 0.25rem;
+}
+.view-chip-meta.hint-inline { font-style: italic; }
+.dash-view-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem 1.25rem;
+  box-shadow: var(--shadow);
+}
+.dash-view-panel h2 {
+  font-size: 1.2rem;
+  margin: 0 0 0.35rem;
+  color: var(--navy);
+}
+.dash-view-panel .hint { margin-bottom: 0.85rem; }
+.dash-view-actions { margin-top: 0.85rem; }
+.browse-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+.browse-card {
+  text-align: left;
+  background: #f7f9fc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.browse-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.browse-card-title { font-weight: 700; color: var(--navy); margin-bottom: 0.25rem; }
+.pill.signoff { background: #e5f6ed; color: #1a7f4b; }
+.pill.conformance { background: #efe8fb; color: #6c3483; }
+#projects-view-chips { margin-bottom: 0.25rem; }
