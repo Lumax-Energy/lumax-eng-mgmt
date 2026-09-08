@@ -134,13 +134,35 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
-  function toast(msg, type) {
+  function toast(msg, type, action) {
     const bar = document.getElementById("status-bar");
+    if (!bar) return;
     const el = document.createElement("div");
     el.className = "toast" + (type ? " " + type : "");
-    el.textContent = msg;
+    const text = document.createElement("div");
+    text.textContent = msg;
+    el.appendChild(text);
+    if (action && action.label && typeof action.onClick === "function") {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "toast-action";
+      btn.textContent = action.label;
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          await action.onClick();
+          el.remove();
+        } catch (e) {
+          btn.disabled = false;
+          toast(e.message || String(e), "error");
+        }
+      };
+      el.appendChild(btn);
+    }
     bar.appendChild(el);
-    setTimeout(() => el.remove(), type === "error" ? 7000 : 4200);
+    setTimeout(() => {
+      if (el.parentNode) el.remove();
+    }, type === "error" || action ? 14000 : 4200);
   }
   function localSaveHint(baseMsg) {
     if (state.settings.pat) return baseMsg + " — click Save to sync";
@@ -556,18 +578,18 @@
   async function loadFromGithub() {
     if (!state.settings.pat) {
       toast("Set a Personal Access Token in Settings first.", "error");
-      return;
+      return false;
     }
     if (state.syncOp) {
       toast("Sync already in progress.", "error");
-      return;
+      return false;
     }
     setSyncBusy("load");
     try {
       const res = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders() });
       if (res.status === 404) {
         toast("data/projects.json not found on main. Using local/seed data.", "error");
-        return;
+        return false;
       }
       if (!res.ok) throw new Error("Load failed (" + res.status + ")");
       const meta = await res.json();
@@ -579,8 +601,10 @@
       markLastSync("Load");
       render();
       toast("Loaded from GitHub (" + state.settings.owner + "/" + state.settings.repo + ")", "success");
+      return true;
     } catch (e) {
       toast("GitHub load error: " + e.message + ". Prefer GitHub Pages or a local static server (CORS).", "error");
+      return false;
     } finally {
       setSyncBusy(null);
     }
@@ -659,9 +683,28 @@
       if (putRes.status === 409 || putRes.status === 422) {
         const err = await putRes.json().catch(() => ({}));
         const msg = err.message || ("conflict (" + putRes.status + ")");
-        throw new Error(
-          "Conflict — someone else saved first. Load, merge carefully, then Save again. (" + msg + ")"
+        const shortSha = (state.fileSha || "").slice(0, 7) || "local";
+        toast(
+          "Save conflict — GitHub file moved (your SHA " +
+            shortSha +
+            "…). Load remote to refresh, then Save again if you still have edits. (" +
+            msg +
+            ")",
+          "error",
+          {
+            label: "Load & retry",
+            onClick: async () => {
+              const ok = window.confirm(
+                "Load remote from GitHub? On-screen data will be replaced, then Save will retry with the fresh SHA."
+              );
+              if (!ok) return;
+              const loaded = await loadFromGithub();
+              if (!loaded) throw new Error("Load failed — Save not retried.");
+              await saveToGithub();
+            },
+          }
         );
+        return;
       }
       if (!putRes.ok) {
         const err = await putRes.json().catch(() => ({}));
@@ -2308,32 +2351,49 @@
 
   // ---------- Wire UI ----------
   function wire() {
+    function on(id, event, handler) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el[event] = handler;
+    }
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.onclick = () => {
-        state.taskFilters = { type: "", statusId: "", assignee: "", overdueOnly: false, projectId: "" };
+        state.taskFilters = {
+          type: "",
+          statusId: "",
+          assignee: "",
+          overdueOnly: false,
+          projectId: "",
+          client: "",
+        };
         setView(btn.dataset.view);
       };
     });
-    document.getElementById("btn-settings").onclick = openSettings;
-    document.getElementById("btn-load").onclick = loadFromGithub;
-    document.getElementById("btn-save").onclick = saveToGithub;
-    document.getElementById("btn-export").onclick = exportJson;
-    document.getElementById("btn-export-excel").onclick = exportExcel;
-    document.getElementById("btn-import").onclick = () => document.getElementById("import-file").click();
-    document.getElementById("import-file").onchange = (e) => {
+    // Note: index.html has btn-export-excel only (no btn-export). Binding a missing
+    // id throws and aborts wire()/bootstrap — that broke live Pages after v2.
+    on("btn-settings", "onclick", openSettings);
+    on("btn-load", "onclick", loadFromGithub);
+    on("btn-save", "onclick", saveToGithub);
+    on("btn-export", "onclick", exportJson);
+    on("btn-export-excel", "onclick", exportExcel);
+    on("btn-import", "onclick", () => {
+      const fileInput = document.getElementById("import-file");
+      if (fileInput) fileInput.click();
+    });
+    on("import-file", "onchange", (e) => {
       const f = e.target.files && e.target.files[0];
       if (f) importJsonFile(f);
       e.target.value = "";
-    };
-    document.getElementById("btn-new-project").onclick = () => openProjectForm(null);
-    document.getElementById("global-search").oninput = (e) => {
+    });
+    on("btn-new-project", "onclick", () => openProjectForm(null));
+    on("global-search", "oninput", (e) => {
       state.search = e.target.value;
       render();
-    };
-    document.getElementById("show-archived").onchange = (e) => {
+    });
+    on("show-archived", "onchange", (e) => {
       state.showArchived = e.target.checked;
       if (state.view === "projects") renderProjects();
-    };
+    });
   }
 
   document.addEventListener("DOMContentLoaded", () => {

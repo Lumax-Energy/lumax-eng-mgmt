@@ -407,3 +407,20 @@ a { color: var(--accent); }
 .pill.signoff { background: #e5f6ed; color: #1a7f4b; }
 .pill.conformance { background: #efe8fb; color: #6c3483; }
 #projects-view-chips { margin-bottom: 0.25rem; }
+
+.toast-action {
+  margin-top: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.toast-action:hover { background: rgba(255,255,255,0.28); }
+.toast-action:disabled { opacity: 0.5; cursor: not-allowed; }
+.toast { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; }
