@@ -2,7 +2,7 @@
 
 Single-page static app for engineering project & task tracking. No build step. Works on **GitHub Pages** or any static host.
 
-**v2.3** Executive / SCL pass: Researchy **6 KPI** traffic-light dashboard (Open projects · Overdue work · Ready for SC letter · SC letters issued · Commercial gaps · Municipal sign-off pending), Excel Dashboard sheet `KPI | Value | Light | Note`, **Structural Conformance Letter** label, structure-type defaults (Carport H-Max … Custom), editable task + project types in Settings, `municipalSignOff` (`pending` | `approved` | `n/a`), **Undo Create SC Letter** (void + keep sequence advanced). Preserves GitHub Load/Save SHA-safe sync, Create SC Letter gate, phase DnD, null-safe `wire()`, Excel navy polish.
+**v2.3** Executive / SCL pass: Researchy **6 KPI** traffic-light dashboard (Open projects · Overdue work · Ready for SC letter · SC letters issued · Commercial gaps · Municipal sign-off pending), Excel Dashboard sheet `KPI | Value | Light | Note`, **Structural Conformance Letter** label, structure-type defaults (Carport H-Max … Custom), editable task + project types in Settings, `municipalSignOff` (`pending` | `approved` | `n/a`), **Undo Create SC Letter** (restore snapshot; decrement seq only if last issued, else void). Preserves GitHub Load/Save SHA-safe sync, Create SC Letter gate, phase DnD, null-safe `wire()`, Excel navy polish.
 
 ## Go live (5 steps)
 
@@ -56,7 +56,7 @@ Drag task cards onto **phase tabs** to change `phaseId`, or onto status columns 
 | `sclUndoSnapshot` | Pre-issue fields for **Undo Create SC Letter** |
 | `sclHistory` | Issued / voided letter audit trail |
 
-**Create SC Letter** (project detail): enabled only when INV + contact + address are set **and** current phase name is **Done** (case-insensitive). Allocates next ref from `settings.scfYear` / `settings.scfSeq`, sets status approved, downloads a Word `.docx` matching the Structural Compliance Form sample. **Undo Create SC Letter** restores the pre-issue snapshot and voids the letter record without reusing the sequence number.
+**Create SC Letter** (project detail): enabled only when INV + contact + address are set **and** current phase name is **Done** (case-insensitive). Allocates next ref from `settings.scfYear` / `settings.scfSeq`, sets status approved, downloads a Word `.docx` matching the Structural Compliance Form sample. **Undo Create SC Letter** restores the pre-issue snapshot. If the voided `LMX-SCL-YYYY-NNN` is the last allocated number (`scfSeq - 1`), `scfSeq` is decremented; otherwise the ref is marked voided in `sclHistory` / `settings.voidedLetters` and the sequence is left unchanged.
 
 Engineer block defaults live in `settings.engineerDefaults` (editable in Settings) — SAMPLE uses fictional values only.
 

@@ -3159,26 +3159,43 @@
     project.sclUndoSnapshot = null;
 
     const settings = state.data.settings || (state.data.settings = {});
-    // Prefer void + keep sequence advanced (do not reuse NNN). Only decrement if
-    // we can prove this was the last allocated unused number — we never decrement here.
-    if (!Array.isArray(settings.voidedLetters)) settings.voidedLetters = [];
-    settings.voidedLetters.push({
-      ref: voidedRef,
-      projectId: project.id,
-      issuedAt: snap.conformanceIssuedAt || null,
-      voidedAt: nowIso(),
-    });
+    const parsed = parseSclRef(voidedRef);
+    let decremented = false;
+    if (parsed) {
+      const year = Number(settings.scfYear);
+      let seq = Number(settings.scfSeq);
+      if (!Number.isFinite(seq) || seq < 1) seq = 1;
+      // If this ref was the last allocated number (scfSeq points at next), decrement.
+      if (parsed.year === year && parsed.seq === seq - 1) {
+        settings.scfSeq = Math.max(1, seq - 1);
+        if (settings.sclSeq != null) settings.sclSeq = settings.scfSeq;
+        decremented = true;
+      }
+    }
+    if (!decremented) {
+      if (!Array.isArray(settings.voidedLetters)) settings.voidedLetters = [];
+      settings.voidedLetters.push({
+        ref: voidedRef,
+        projectId: project.id,
+        issuedAt: null,
+        voidedAt: nowIso(),
+      });
+    }
     if (!Array.isArray(project.sclHistory)) project.sclHistory = [];
     project.sclHistory.push({
       ref: voidedRef,
       issuedAt: null,
-      action: "voided",
+      action: decremented ? "undone" : "voided",
       at: nowIso(),
     });
     project.updatedAt = nowIso();
     cacheDataLocally();
     toast(
-      localSaveHint("Undid " + voidedRef + " (voided — sequence left advanced; next issue gets next NNN)"),
+      localSaveHint(
+        decremented
+          ? "Undid " + voidedRef + " (sequence restored)"
+          : "Undid " + voidedRef + " (marked voided — sequence left unchanged)"
+      ),
       "success"
     );
     render();

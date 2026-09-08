@@ -43,10 +43,10 @@
     "myAssignee": "",
     "projectTypes": [
       "Carport",
-      "GM",
-      "SAT",
-      "Rooftop",
+      "Ground mount",
+      "SAT tracker",
       "Rooftop ballast",
+      "Rooftop flush mount",
       "Custom"
     ],
     "structureTypes": [
@@ -70,7 +70,7 @@
       "contact": "+27(0) 00 000 0000 · demo-eng@example.invalid"
     },
     "scfYear": 2026,
-    "scfSeq": 4,
+    "scfSeq": 3,
     "taskTypes": [
       {
         "id": "rdn",
@@ -123,7 +123,7 @@
       "invoiceNumber": "1002/70003244",
       "address": "V8C7+HP Groblersdal (fictional) Â· -25.128538, 29.314367",
       "contactPerson": "Ben-Ernst Sample Â· +27 76 000 0001",
-      "projectType": "PV GM (SteelCore)",
+      "projectType": "Ground mount",
       "structureTypes": [
         "GM Steel"
       ],
@@ -172,45 +172,18 @@
           "name": "Done"
         }
       ],
-      "engineeringSignOff": true,
+      "engineeringSignOff": false,
       "engineeringSignOffAt": "2026-09-01T10:00:00.000Z",
       "engineeringSignOffBy": "Demo Engineer",
-      "conformanceStatus": "approved",
-      "conformanceRef": "LMX-SCL-2026-003",
-      "conformanceIssuedAt": "2026-09-08T09:40:30.120Z",
-      "conformanceCert": {
-        "ref": "LMX-SCL-2026-003",
-        "issuedAt": "2026-09-08T09:40:30.120Z",
-        "dateLabel": "08/09/2026",
-        "clientName": "SAMPLE Client Alpha",
-        "projectName": "SAMPLE â Ready SCF Farm (Groblersdal fiction)",
-        "projectCode": "DEMO-SCF-READY",
-        "projectType": "PV GM (SteelCore)",
-        "structureTypes": [
-          "PV GM (SteelCore)"
-        ],
-        "address": "V8C7+HP Groblersdal (fictional) Â· -25.128538, 29.314367",
-        "contactPerson": "Ben-Ernst Sample Â· +27 76 000 0001",
-        "invoiceNumber": "1002/70003244",
-        "poNumber": "PO-DEMO-7781",
-        "popReference": "POP-DEMO-441",
-        "drawingNumbers": [
-          "TZF-GM-001",
-          "TZF-GM-002"
-        ],
-        "engineer": {
-          "name": "Demo Pr. Eng. (SAMPLE)",
-          "ecsaNo": "ECSA-DEMO-00000",
-          "business": "Lumax ENERGY (PTY) Ltd â SAMPLE",
-          "address": "Demo Corporate Park North, Midrand 1685",
-          "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
-        }
-      },
+      "conformanceStatus": "none",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
       "activePhaseId": "ready-phase-done",
       "archived": false,
       "createdAt": "2026-07-01T08:00:00.000Z",
       "updatedAt": "2026-09-08T09:40:30.120Z",
-      "municipalSignOff": "approved",
+      "municipalSignOff": "pending",
       "sclHistory": [],
       "sclUndoSnapshot": null
     },
@@ -222,7 +195,7 @@
       "salesOrderNumber": "SO-DEMO-2002",
       "poNumber": "PO-DEMO-9001",
       "popReference": "",
-      "invoiceNumber": "6",
+      "invoiceNumber": "",
       "address": "12 Fiction Road, Midrand (SAMPLE)",
       "contactPerson": "Casey Contact Â· +27 82 000 0002",
       "projectType": "Rooftop ballast",
@@ -277,42 +250,15 @@
       "engineeringSignOff": false,
       "engineeringSignOffAt": null,
       "engineeringSignOffBy": "",
-      "conformanceStatus": "approved",
-      "conformanceRef": "LMX-SCF-2026-002",
-      "conformanceIssuedAt": "2026-09-08T08:52:55.627Z",
-      "conformanceCert": {
-        "ref": "LMX-SCF-2026-002",
-        "issuedAt": "2026-09-08T08:52:55.627Z",
-        "dateLabel": "08/09/2026",
-        "clientName": "SAMPLE Client Beta",
-        "projectName": "SAMPLE â Missing INV Rooftop",
-        "projectCode": "DEMO-MISS-INV",
-        "projectType": "Rooftop ballast",
-        "structureTypes": [
-          "Carport H-Max",
-          "Rooftop ballast"
-        ],
-        "address": "12 Fiction Road, Midrand (SAMPLE)",
-        "contactPerson": "Casey Contact Â· +27 82 000 0002",
-        "invoiceNumber": "4",
-        "poNumber": "PO-DEMO-9001",
-        "popReference": "",
-        "drawingNumbers": [
-          "DRW-RT-101"
-        ],
-        "engineer": {
-          "name": "Demo Pr. Eng. (SAMPLE)",
-          "ecsaNo": "ECSA-DEMO-00000",
-          "business": "Lumax ENERGY (PTY) Ltd â SAMPLE",
-          "address": "Demo Corporate Park North, Midrand 1685",
-          "contact": "+27(0) 00 000 0000 Â· demo-eng@example.invalid"
-        }
-      },
+      "conformanceStatus": "none",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
       "activePhaseId": "gap-phase-done",
       "archived": false,
       "createdAt": "2026-08-01T08:00:00.000Z",
       "updatedAt": "2026-09-08T08:53:36.827Z",
-      "municipalSignOff": "n/a",
+      "municipalSignOff": "pending",
       "sclHistory": [],
       "sclUndoSnapshot": null
     },
