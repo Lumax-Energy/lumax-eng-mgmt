@@ -1,6 +1,6 @@
 {
   "version": 2.1,
-  "updatedAt": "2026-09-08T08:52:31.464Z",
+  "updatedAt": "2026-09-08T08:55:52.516Z",
   "settings": {
     "taskStatuses": [
       {
@@ -46,7 +46,8 @@
       "GM",
       "SAT",
       "Rooftop",
-      "Custom"
+      "Custom",
+      "Rooftop ballast"
     ],
     "structureTypes": [
       "Carport H-Max",
@@ -69,7 +70,7 @@
       "contact": "+27(0) 00 000 0000 · demo-eng@example.invalid"
     },
     "scfYear": 2026,
-    "scfSeq": 2
+    "scfSeq": 3
   },
   "projects": [
     {
@@ -152,11 +153,12 @@
       "salesOrderNumber": "SO-DEMO-2002",
       "poNumber": "PO-DEMO-9001",
       "popReference": "",
-      "invoiceNumber": "",
+      "invoiceNumber": "6",
       "address": "12 Fiction Road, Midrand (SAMPLE)",
       "contactPerson": "Casey Contact · +27 82 000 0002",
       "projectType": "Rooftop ballast",
       "structureTypes": [
+        "Carport H-Max",
         "Rooftop ballast"
       ],
       "drawingNumbers": [
@@ -206,14 +208,41 @@
       "engineeringSignOff": false,
       "engineeringSignOffAt": null,
       "engineeringSignOffBy": "",
-      "conformanceStatus": "none",
-      "conformanceRef": "",
-      "conformanceIssuedAt": null,
-      "conformanceCert": null,
-      "activePhaseId": null,
+      "conformanceStatus": "approved",
+      "conformanceRef": "LMX-SCF-2026-002",
+      "conformanceIssuedAt": "2026-09-08T08:52:55.627Z",
+      "conformanceCert": {
+        "ref": "LMX-SCF-2026-002",
+        "issuedAt": "2026-09-08T08:52:55.627Z",
+        "dateLabel": "08/09/2026",
+        "clientName": "SAMPLE Client Beta",
+        "projectName": "SAMPLE — Missing INV Rooftop",
+        "projectCode": "DEMO-MISS-INV",
+        "projectType": "Rooftop ballast",
+        "structureTypes": [
+          "Carport H-Max",
+          "Rooftop ballast"
+        ],
+        "address": "12 Fiction Road, Midrand (SAMPLE)",
+        "contactPerson": "Casey Contact · +27 82 000 0002",
+        "invoiceNumber": "4",
+        "poNumber": "PO-DEMO-9001",
+        "popReference": "",
+        "drawingNumbers": [
+          "DRW-RT-101"
+        ],
+        "engineer": {
+          "name": "Demo Pr. Eng. (SAMPLE)",
+          "ecsaNo": "ECSA-DEMO-00000",
+          "business": "Lumax ENERGY (PTY) Ltd — SAMPLE",
+          "address": "Demo Corporate Park North, Midrand 1685",
+          "contact": "+27(0) 00 000 0000 · demo-eng@example.invalid"
+        }
+      },
+      "activePhaseId": "gap-phase-done",
       "archived": false,
       "createdAt": "2026-08-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T08:52:28.803Z"
+      "updatedAt": "2026-09-08T08:53:36.827Z"
     },
     {
       "id": "proj-sample-mid-design",
