@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-08T12:10:32.098Z",
+  "updatedAt": "2026-09-08T12:10:42.188Z",
   "settings": {
     "taskStatuses": [
       {
@@ -923,7 +923,7 @@
       "title": "Rivaal's House",
       "description": "",
       "type": "eng_task",
-      "statusId": "status-done",
+      "statusId": "status-blocked",
       "assignee": "Rivaal",
       "priority": "high",
       "dueDate": "2026-09-11",
@@ -939,7 +939,7 @@
       "rev": "",
       "discipline": "Structural Eng.",
       "createdAt": "2026-09-08T12:01:52.272Z",
-      "updatedAt": "2026-09-08T12:10:30.026Z"
+      "updatedAt": "2026-09-08T12:10:40.530Z"
     },
     {
       "id": "task-vlx52c8ge2va",
