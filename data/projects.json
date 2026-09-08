@@ -1,6 +1,6 @@
 {
   "version": 2.1,
-  "updatedAt": "2026-09-08T07:30:00.000Z",
+  "updatedAt": "2026-09-08T08:39:01.389Z",
   "settings": {
     "taskStatuses": [
       {
@@ -57,9 +57,9 @@
     "engineerDefaults": {
       "name": "Demo Pr. Eng. (SAMPLE)",
       "ecsaNo": "ECSA-DEMO-00000",
-      "business": "Lumax ENERGY (PTY) Ltd \u2014 SAMPLE",
+      "business": "Lumax ENERGY (PTY) Ltd — SAMPLE",
       "address": "Demo Corporate Park North, Midrand 1685",
-      "contact": "+27(0) 00 000 0000 \u00b7 demo-eng@example.invalid"
+      "contact": "+27(0) 00 000 0000 · demo-eng@example.invalid"
     },
     "scfYear": 2026,
     "scfSeq": 2
@@ -68,14 +68,14 @@
     {
       "id": "proj-sample-ready-scf",
       "clientName": "SAMPLE Client Alpha",
-      "projectName": "SAMPLE \u2014 Ready SCF Farm (Groblersdal fiction)",
+      "projectName": "SAMPLE — Ready SCF Farm (Groblersdal fiction)",
       "projectCode": "DEMO-SCF-READY",
       "salesOrderNumber": "SO-DEMO-2001",
       "poNumber": "PO-DEMO-7781",
       "popReference": "POP-DEMO-441",
       "invoiceNumber": "1002/70003244",
-      "address": "V8C7+HP Groblersdal (fictional) \u00b7 -25.128538, 29.314367",
-      "contactPerson": "Ben-Ernst Sample \u00b7 +27 76 000 0001",
+      "address": "V8C7+HP Groblersdal (fictional) · -25.128538, 29.314367",
+      "contactPerson": "Ben-Ernst Sample · +27 76 000 0001",
       "projectType": "PV GM (SteelCore)",
       "structureTypes": [
         "PV GM (SteelCore)"
@@ -85,7 +85,7 @@
         "TZF-GM-002"
       ],
       "customFields": {
-        "Note": "Fictional SAMPLE \u2014 ready to certify"
+        "Note": "Fictional SAMPLE — ready to certify"
       },
       "phases": [
         {
@@ -132,22 +132,22 @@
       "conformanceRef": "",
       "conformanceIssuedAt": null,
       "conformanceCert": null,
+      "activePhaseId": "ready-phase-done",
       "archived": false,
       "createdAt": "2026-07-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T07:00:00.000Z",
-      "activePhaseId": "ready-phase-done"
+      "updatedAt": "2026-09-08T07:00:00.000Z"
     },
     {
       "id": "proj-sample-missing-inv",
       "clientName": "SAMPLE Client Beta",
-      "projectName": "SAMPLE \u2014 Missing INV Rooftop",
+      "projectName": "SAMPLE — Missing INV Rooftop",
       "projectCode": "DEMO-MISS-INV",
       "salesOrderNumber": "SO-DEMO-2002",
       "poNumber": "PO-DEMO-9001",
       "popReference": "",
       "invoiceNumber": "",
       "address": "12 Fiction Road, Midrand (SAMPLE)",
-      "contactPerson": "Casey Contact \u00b7 +27 82 000 0002",
+      "contactPerson": "Casey Contact · +27 82 000 0002",
       "projectType": "Rooftop ballast",
       "structureTypes": [
         "Rooftop ballast"
@@ -156,7 +156,7 @@
         "DRW-RT-101"
       ],
       "customFields": {
-        "Note": "Fictional SAMPLE \u2014 missing invoice"
+        "Note": "Fictional SAMPLE — missing invoice"
       },
       "phases": [
         {
@@ -203,6 +203,7 @@
       "conformanceRef": "",
       "conformanceIssuedAt": null,
       "conformanceCert": null,
+      "activePhaseId": null,
       "archived": false,
       "createdAt": "2026-08-01T08:00:00.000Z",
       "updatedAt": "2026-09-08T07:00:00.000Z"
@@ -210,14 +211,14 @@
     {
       "id": "proj-sample-mid-design",
       "clientName": "SAMPLE Client Gamma",
-      "projectName": "SAMPLE \u2014 Mid-design SAT Array",
+      "projectName": "SAMPLE — Mid-design SAT Array",
       "projectCode": "DEMO-MID-SAT",
       "salesOrderNumber": "SO-DEMO-2003",
       "poNumber": "",
       "popReference": "POP-DEMO-112",
       "invoiceNumber": "INV-DEMO-555",
       "address": "",
-      "contactPerson": "Riley Site \u00b7 +27 71 000 0003",
+      "contactPerson": "Riley Site · +27 71 000 0003",
       "projectType": "SAT",
       "structureTypes": [
         "SAT tracker"
@@ -226,7 +227,7 @@
         "SAT-GA-01"
       ],
       "customFields": {
-        "Note": "Fictional SAMPLE \u2014 mid design / site investigation"
+        "Note": "Fictional SAMPLE — mid design / site investigation"
       },
       "phases": [
         {
@@ -273,6 +274,7 @@
       "conformanceRef": "",
       "conformanceIssuedAt": null,
       "conformanceCert": null,
+      "activePhaseId": null,
       "archived": false,
       "createdAt": "2026-08-10T08:00:00.000Z",
       "updatedAt": "2026-09-08T07:00:00.000Z"
@@ -280,14 +282,14 @@
     {
       "id": "proj-sample-archived-scf",
       "clientName": "SAMPLE Client Delta",
-      "projectName": "SAMPLE \u2014 Archived Carport (issued)",
+      "projectName": "SAMPLE — Archived Carport (issued)",
       "projectCode": "DEMO-ARCH-001",
       "salesOrderNumber": "SO-DEMO-1999",
       "poNumber": "PO-ARCH-88",
       "popReference": "POP-ARCH-9",
       "invoiceNumber": "INV-ARCH-001",
       "address": "Unit 9 Fiction Park, Centurion (SAMPLE)",
-      "contactPerson": "Morgan Owner \u00b7 +27 83 000 0004",
+      "contactPerson": "Morgan Owner · +27 83 000 0004",
       "projectType": "Carport",
       "structureTypes": [
         "Carport"
@@ -297,7 +299,7 @@
         "CRP-002"
       ],
       "customFields": {
-        "Note": "Fictional SAMPLE \u2014 SCF already issued"
+        "Note": "Fictional SAMPLE — SCF already issued"
       },
       "phases": [
         {
@@ -348,14 +350,14 @@
         "issuedAt": "2026-08-20T09:00:00.000Z",
         "dateLabel": "20/08/2026",
         "clientName": "SAMPLE Client Delta",
-        "projectName": "SAMPLE \u2014 Archived Carport (issued)",
+        "projectName": "SAMPLE — Archived Carport (issued)",
         "projectCode": "DEMO-ARCH-001",
         "projectType": "Carport",
         "structureTypes": [
           "Carport"
         ],
         "address": "Unit 9 Fiction Park, Centurion (SAMPLE)",
-        "contactPerson": "Morgan Owner \u00b7 +27 83 000 0004",
+        "contactPerson": "Morgan Owner · +27 83 000 0004",
         "invoiceNumber": "INV-ARCH-001",
         "poNumber": "PO-ARCH-88",
         "popReference": "POP-ARCH-9",
@@ -366,27 +368,27 @@
         "engineer": {
           "name": "Demo Pr. Eng. (SAMPLE)",
           "ecsaNo": "ECSA-DEMO-00000",
-          "business": "Lumax ENERGY (PTY) Ltd \u2014 SAMPLE",
+          "business": "Lumax ENERGY (PTY) Ltd — SAMPLE",
           "address": "Demo Corporate Park North, Midrand 1685",
-          "contact": "+27(0) 00 000 0000 \u00b7 demo-eng@example.invalid"
+          "contact": "+27(0) 00 000 0000 · demo-eng@example.invalid"
         }
       },
+      "activePhaseId": "arch-phase-done",
       "archived": true,
       "createdAt": "2026-05-01T08:00:00.000Z",
-      "updatedAt": "2026-08-20T09:00:00.000Z",
-      "activePhaseId": "arch-phase-done"
+      "updatedAt": "2026-08-20T09:00:00.000Z"
     },
     {
       "id": "proj-sample-demo-001",
       "clientName": "Demo",
-      "projectName": "SAMPLE \u2014 Demo Solar Array",
+      "projectName": "SAMPLE — Demo Solar Array",
       "projectCode": "DEMO-001",
       "salesOrderNumber": "SO-DEMO-1001",
       "poNumber": "PO-DEMO-1001",
       "popReference": "POP-DEMO-1001",
       "invoiceNumber": "INV-DEMO-1001",
       "address": "Fictional Industrial Park 201",
-      "contactPerson": "Alex Engineer \u00b7 +27 60 000 0005",
+      "contactPerson": "Alex Engineer · +27 60 000 0005",
       "projectType": "PV GM (SteelCore)",
       "structureTypes": [
         "PV GM (SteelCore)",
@@ -446,6 +448,7 @@
       "conformanceRef": "",
       "conformanceIssuedAt": null,
       "conformanceCert": null,
+      "activePhaseId": null,
       "archived": false,
       "createdAt": "2026-08-01T08:00:00.000Z",
       "updatedAt": "2026-09-08T07:00:00.000Z"
@@ -463,7 +466,6 @@
       "priority": "high",
       "dueDate": "2026-09-01",
       "phaseId": "ready-phase-closeout",
-      "discipline": "Structural",
       "blockedReason": "",
       "doneDate": "2026-09-01",
       "refNumber": "",
@@ -473,6 +475,7 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
+      "discipline": "Structural",
       "createdAt": "2026-08-01T08:00:00.000Z",
       "updatedAt": "2026-09-01T10:00:00.000Z"
     },
@@ -487,7 +490,6 @@
       "priority": "medium",
       "dueDate": "2026-09-05",
       "phaseId": "ready-phase-done",
-      "discipline": "QA",
       "blockedReason": "",
       "doneDate": "2026-09-05",
       "refNumber": "",
@@ -497,6 +499,7 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
+      "discipline": "QA",
       "createdAt": "2026-09-01T08:00:00.000Z",
       "updatedAt": "2026-09-05T10:00:00.000Z"
     },
@@ -511,7 +514,6 @@
       "priority": "high",
       "dueDate": "2026-09-18",
       "phaseId": "gap-phase-check",
-      "discipline": "",
       "blockedReason": "",
       "doneDate": null,
       "refNumber": "",
@@ -521,6 +523,7 @@
       "calcOrDrawingRef": "DRW-RT-101",
       "drawingNumber": "",
       "rev": "",
+      "discipline": "",
       "createdAt": "2026-08-05T08:00:00.000Z",
       "updatedAt": "2026-09-07T10:00:00.000Z"
     },
@@ -535,7 +538,6 @@
       "priority": "medium",
       "dueDate": "2026-09-25",
       "phaseId": "mid-phase-site-investigation",
-      "discipline": "Civil",
       "blockedReason": "",
       "doneDate": null,
       "refNumber": "",
@@ -545,6 +547,7 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
+      "discipline": "Civil",
       "createdAt": "2026-08-12T08:00:00.000Z",
       "updatedAt": "2026-09-08T07:00:00.000Z"
     },
@@ -559,7 +562,6 @@
       "priority": "high",
       "dueDate": "2026-09-22",
       "phaseId": "mid-phase-drawings",
-      "discipline": "",
       "blockedReason": "",
       "doneDate": null,
       "refNumber": "",
@@ -569,6 +571,7 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "SAT-GA-01",
       "rev": "A",
+      "discipline": "",
       "createdAt": "2026-08-15T08:00:00.000Z",
       "updatedAt": "2026-09-08T07:00:00.000Z"
     },
@@ -583,7 +586,6 @@
       "priority": "low",
       "dueDate": "2026-08-18",
       "phaseId": "arch-phase-done",
-      "discipline": "Structural",
       "blockedReason": "",
       "doneDate": "2026-08-18",
       "refNumber": "",
@@ -593,6 +595,7 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
+      "discipline": "Structural",
       "createdAt": "2026-06-01T08:00:00.000Z",
       "updatedAt": "2026-08-18T10:00:00.000Z"
     },
@@ -607,7 +610,6 @@
       "priority": "high",
       "dueDate": "2026-08-15",
       "phaseId": "demo-phase-intake",
-      "discipline": "Geotech",
       "blockedReason": "",
       "doneDate": "2026-08-14",
       "refNumber": "",
@@ -617,6 +619,7 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
+      "discipline": "Geotech",
       "createdAt": "2026-08-01T08:00:00.000Z",
       "updatedAt": "2026-08-14T10:00:00.000Z"
     },
@@ -631,9 +634,6 @@
       "priority": "high",
       "dueDate": "2026-09-20",
       "phaseId": "demo-phase-drawings",
-      "drawingNumber": "DRW-DEMO-001",
-      "rev": "A",
-      "discipline": "",
       "blockedReason": "",
       "doneDate": null,
       "refNumber": "",
@@ -641,6 +641,9 @@
       "responseDue": null,
       "checker": "",
       "calcOrDrawingRef": "",
+      "drawingNumber": "DRW-DEMO-001",
+      "rev": "A",
+      "discipline": "",
       "createdAt": "2026-08-05T08:00:00.000Z",
       "updatedAt": "2026-09-07T20:54:23.000Z"
     },
@@ -655,7 +658,6 @@
       "priority": "medium",
       "dueDate": "2026-10-01",
       "phaseId": "demo-phase-design",
-      "discipline": "Structural",
       "blockedReason": "",
       "doneDate": null,
       "refNumber": "",
@@ -665,6 +667,7 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
+      "discipline": "Structural",
       "createdAt": "2026-08-10T08:00:00.000Z",
       "updatedAt": "2026-09-07T20:54:23.000Z"
     },
@@ -679,7 +682,6 @@
       "priority": "medium",
       "dueDate": "2026-09-25",
       "phaseId": "demo-phase-site-investigation",
-      "discipline": "Civil",
       "blockedReason": "",
       "doneDate": null,
       "refNumber": "",
@@ -689,13 +691,14 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
+      "discipline": "Civil",
       "createdAt": "2026-09-01T08:00:00.000Z",
       "updatedAt": "2026-09-08T06:30:00.000Z"
     },
     {
       "id": "task-standalone-rdn-1",
       "projectId": null,
-      "title": "SAMPLE RDN \u2014 Clarification on pile spacing",
+      "title": "SAMPLE RDN — Clarification on pile spacing",
       "description": "Fictional RDN for demo inbox / standalone workflow.",
       "type": "rdn",
       "statusId": "status-in-check",
@@ -703,11 +706,11 @@
       "priority": "high",
       "dueDate": "2026-09-12",
       "phaseId": null,
+      "blockedReason": "",
+      "doneDate": null,
       "refNumber": "RDN-DEMO-0042",
       "raisedBy": "Site PM (fictional)",
       "responseDue": "2026-09-10",
-      "blockedReason": "",
-      "doneDate": null,
       "checker": "",
       "calcOrDrawingRef": "",
       "drawingNumber": "",
