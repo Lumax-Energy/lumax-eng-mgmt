@@ -2,7 +2,7 @@
 
 Single-page static app for engineering project & task tracking. No build step. Works on **GitHub Pages** or any static host.
 
-**v2.1** builds on v2 with commercial project fields (PO / POP / INV / address / contact / project & structure types), a terminal **Done** phase, Structural Compliance Form (SCF) issue gate + printable certificate (`LMX-SCF-YYYY-NNN`), richer SAMPLE demos, and extra Dashboard views (SCF ready/issued, commercial gaps, by type). GitHub Load/Save SHA-safe behaviour (including conflict Load & retry) is unchanged.
+**v2.1** adds commercial fields (PO / POP / INV / address / contact / project type), terminal **Done** phase, **Structural Compliance Form (SCF)** issue + printable HTML preview (`LMX-SCF-YYYY-NNN`), richer dashboard chips, and Excel Projects + SCF sheets. GitHub Load/Save JSON sync is preserved (null-safe `wire()` from #3).
 
 ## Go live (5 steps)
 
@@ -10,7 +10,7 @@ Single-page static app for engineering project & task tracking. No build step. W
 2. Each person creates **their own** PAT (classic `repo`, or fine-grained Contents Read/Write + Metadata on this repo only).
 3. Enable **GitHub Pages**: branch `main`, folder `/` (root) — or run `npx serve .` / `python3 -m http.server 8080` locally. Avoid `file://`.
 4. Open the Pages (or local) URL → **Settings** → confirm owner/repo → paste PAT → **Load**.
-5. Sample project **DEMO-001 / Demo** is **fictional SAMPLE data** — edit or delete after onboarding. Never commit real PATs.
+5. SAMPLE projects are **fictional** — edit or delete after onboarding. Never commit real PATs. Do not paste real client PII into SAMPLE seed.
 
 For host ranking and concrete Cloudflare / Render / Pages steps, see **[DEPLOY.md](./DEPLOY.md)**.
 
@@ -24,25 +24,42 @@ For host ranking and concrete Cloudflare / Render / Pages steps, see **[DEPLOY.m
 | `data/projects.json` | Shared data (synced via GitHub API) |
 | `DEPLOY.md` | Go-live host ranking + Cloudflare / Render / Pages steps |
 
-## v2 information architecture
+## Information architecture
 
-**Top nav:** Dashboard · Projects · Tasks · search · Load / Save / Export Excel / Export JSON / Import / Settings
+**Top nav:** Dashboard · Projects · Tasks · search · Load / Save / Export Excel / Import / Settings
 
-- **Dashboard** — open/overdue counts; open by status; by type; overdue/due-7d by assignee; projects at risk; my work; recent activity (links into filtered Tasks).
-- **Projects** — card grid (client / code / SO / open·blocked·overdue). Drill-in: phase tabs + kanban board (columns = statuses).
-- **Tasks** — flat backlog across projects + standalone; filter type · status · assignee · project · overdue; list or board.
-
-### Default phases (new projects, editable per project)
+### Default phases (new projects, editable)
 
 Intake · Concept · Design · Check · Drawings · Site investigation · Site/Construction support · Close-out · **Done**
 
-### Default task statuses (global, editable in Settings)
+**Current phase** = first phase with open tasks; if every task is done, the terminal (**last**) phase — normally **Done**.
 
-Backlog · To do · Doing · In check · Blocked · Done  
+### Commercial / SCF project fields
 
-Board columns follow this list (order = column order).
+| Field | Notes |
+|-------|--------|
+| `poNumber` | Purchase order |
+| `popReference` | POP reference |
+| `invoiceNumber` | INV — required to issue SCF |
+| `address` | Site / project address — required to issue |
+| `contactPerson` | Required to issue |
+| `projectType` | Selectable list (Settings) + free text |
+| `structureTypes[]` | Multi-select from Settings list |
+| `engineeringSignOff` | Eng sign-off flag + at/by |
+| `conformanceStatus` | `none` \| `pending` \| `approved` |
+| `conformanceRef` | `LMX-SCF-YYYY-NNN` (never bare `008`) |
+| `conformanceIssuedAt` | ISO timestamp |
+| `conformanceCert` | Snapshot at issue (for stable print preview) |
 
-### Task types (required)
+**Issue conformance** (project detail): enabled only when INV + contact + address are set **and** current phase name is **Done** (case-insensitive). Allocates next ref from `settings.scfYear` / `settings.scfSeq`, sets status approved, opens printable HTML SCF preview. Blocked state shows a checklist; missing fields are listed in a toast via **Missing fields…** / issue attempt.
+
+Engineer block defaults live in `settings.engineerDefaults` (editable in Settings) — SAMPLE uses fictional values only.
+
+### Dashboard view chips
+
+Clients · Assignees · By project type · Eng sign-off · Has conformance · **SCF ready** · **SCF issued** · **Commercial gaps** · **Missing PO/POP/INV** · Missing INV · Missing address · Site investigation
+
+### Task types
 
 | Type id | Label | Extra fields |
 |---------|-------|----------------|
@@ -51,83 +68,29 @@ Board columns follow this list (order = column order).
 | `drawing` | Drawing | Drawing #, rev |
 | `eng_task` | Eng task | Discipline |
 
-Shared fields: title, description, assignee, status, priority, due, phase, **project (nullable = standalone)**, blocked reason, done date.
-
 ### Excel export
 
-One-click **Export Excel** (SheetJS CDN) downloads a single workbook with sheets in this order:
+Workbook sheets (header freeze + autofilter):
 
-1. **Dashboard** — KPIs; open by status / type / assignee / client / project (always **full** dataset)
-2. **All Tasks** — flat task rows (**filter-scoped** when UI filters/search are active)
-3. **Projects** — code, name, client, SO, **PO / POP / INV**, address, contact, type, conformance ref, counts (**full**)
-4. **SCF** — Structural Compliance Form rows (ref, INV, commercial fields, engineer defaults) (**full**)
-5. **By Assignee** — all tasks sorted by assignee (**full**)
-6. **By Client** — all tasks sorted by client (**full**)
-7. **By Project** — all tasks sorted by project (**full**)
-8. **RDN** — type split (**filter-scoped**)
-9. **Design Checks** — type split (**filter-scoped**)
-10. **Drawings** — type split (**filter-scoped**)
-11. **Eng Tasks** — type split (**filter-scoped**)
-12. **Summary** — type × status matrix + tallies (**full**)
+1. Dashboard · 2. All Tasks · 3. **Projects** (PO/POP/INV/Address/Contact/Type/Conformance ref) · 4. **SCF** · 5. By Assignee · 6. By Client · 7. By Project · 8. RDN · 9. Design Checks · 10. Drawings · 11. Eng Tasks · 12. Summary
 
-Every sheet freezes the header row and enables autofilter. Empty sheets are still included. A toast notes when export is filter-scoped. **Export JSON** remains for backup/sync.
+UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCF / Summary / By-* use the full dataset.
 
-### SCF issue gate (v2.1)
-
-**Issue SCF** on a project is hard-disabled until:
-
-- `invoiceNumber` populated
-- `contactPerson` populated
-- `address` populated
-- current phase is **Done** (case-insensitive), with **Close-out** accepted as an alias
-
-Issuing allocates `LMX-SCF-YYYY-NNN` from Settings `scfYear` / `scfSeq` (year resets sequence), sets conformance to **approved**, and stores a certificate snapshot (client / project / type / address / contact / invoice / drawings + engineer block). Preview / print uses an HTML print-friendly Structural Compliance Form layout (not a bare `008` ref).
-
-## Prefer Pages or a local static server
-
-Opening `index.html` via `file://` often breaks:
-
-- Fetching `./data/projects.json` (browser restrictions)
-- Calling the GitHub API (CORS)
-
-**Recommended:** GitHub Pages from `main` `/`, or `npx serve .` / `python3 -m http.server 8080`.
-
-## Multi-engineer setup
-
-### 1. Invite collaborators
-
-Repo **Settings → Collaborators** (or org team). At least **Write** so engineers can update `data/projects.json` via the Contents API.
-
-### 2. Personal Access Tokens (PAT)
-
-**Never share passwords.** Each person uses **their own** PAT.
-
-- Classic: scope **`repo`**
-- Fine-grained: this repo, **Contents** Read/Write + **Metadata** Read
-
-In the app: **Settings** → owner/repo + PAT. The PAT is stored **only in localStorage** — it is **never** written into `data/projects.json`.
-
-### 3. Load / Save sync
+## Multi-engineer sync
 
 - **Load** — `GET` `data/projects.json` (reads SHA).
-- **Save** — `PUT` with current SHA (optimistic concurrency). Message: `Update engineering projects data`.
-- If SHA is missing (never Loaded), Save fetches file metadata only to obtain the SHA — it does **not** replace on-screen data with remote. You may be asked to confirm if remote differs.
-- Conflicts: GitHub rejects the write — **Load**, merge carefully, then **Save** again. The app does **not** silently refresh SHA on conflict and overwrite.
-- A local cache of the last loaded data is kept in `localStorage` as a backup.
-- `normalizeData()` upgrades v1 → v2 (maps old `todo`/`doing`/`done` strings to status ids; flattens nested project tasks into the top-level `tasks` array).
-
-### 4. Offline Export / Import
-
-- **Export JSON** downloads the current dataset.
-- **Import** replaces the in-app dataset from a JSON file (then Save to GitHub when ready).
-- **Export Excel** is the primary spreadsheet hand-off.
+- **Save** — `PUT` with current SHA. Conflicts show toast with **Load & retry** (does not silently overwrite).
+- PAT stored **only in localStorage** — never in `projects.json`.
+- `normalizeData()` upgrades older payloads (adds Done phase, commercial fields, SCF settings).
+- `wire()` is null-safe for missing header buttons (preserves #3 fix).
 
 ## Sample data
 
-`data/projects.json` ships with **≥4 fictional SAMPLE projects** (SCF-ready, missing INV, mid-design / site investigation, archived with `LMX-SCF-2026-001` issued) plus DEMO-001 and a standalone SAMPLE RDN. Safe to edit or delete after onboarding. Engineer defaults in Settings are fictional SAMPLE values.
+`data/projects.json` ships with **≥4 clearly labeled SAMPLE** projects (fictional Demo clients / DEMO-* codes), multiple assignees, ≥2 in Site investigation, varied types (PV GM SteelCore, Rooftop ballast, SAT, Carport), mixed task types, one project **ready to issue** (INV+contact+address+Done), and one **already issued** as `LMX-SCF-2026-001`. Safe to edit or delete after onboarding.
 
 ## Security reminders
 
 - Do not commit PATs, passwords, or `.env` files.
 - Do not share another engineer’s credentials; each person uses their own PAT.
 - Treat `data/projects.json` as shared business data — coordinate Saves to avoid overwriting each other’s work.
+- SAMPLE seed must stay fictional (no real client / engineer PII).

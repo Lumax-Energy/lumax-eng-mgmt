@@ -422,15 +422,12 @@
     return project.phases[0];
   }
   function isDonePhaseName(name) {
-    const n = String(name || "").trim().toLowerCase().replace(/[_]+/g, " ").replace(/\s+/g, " ");
-    return n === "done" || n === "close-out" || n === "close out" || n === "closeout";
+    return /^done$/i.test(String(name || "").trim());
   }
   function projectInDonePhase(project) {
     if (!project) return false;
     const cur = projectCurrentPhase(project);
-    if (!cur) return false;
-    // Terminal Done, or Close-out alias when it is the current phase.
-    return isDonePhaseName(cur.name);
+    return !!(cur && isDonePhaseName(cur.name));
   }
   function ensureDonePhase(phases) {
     const list = Array.isArray(phases) ? phases.slice() : [];
@@ -2192,7 +2189,7 @@
             ["Invoice number (INV)", !!(p.invoiceNumber || "").trim()],
             ["Contact person", !!(p.contactPerson || "").trim()],
             ["Address", !!(p.address || "").trim()],
-            ["Current phase is Done (Close-out aliases)", projectInDonePhase(p)],
+            ["Current phase is Done", projectInDonePhase(p)],
           ]
             .map(
               ([label, ok]) =>
