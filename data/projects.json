@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-09-07T20:54:23.000Z",
+  "updatedAt": "2026-09-08T06:30:00.000Z",
   "settings": {
     "taskStatuses": [
       {
@@ -46,7 +46,7 @@
     {
       "id": "proj-sample-demo-001",
       "clientName": "Demo",
-      "projectName": "SAMPLE \u2014 Demo Solar Array",
+      "projectName": "SAMPLE — Demo Solar Array",
       "projectCode": "DEMO-001",
       "salesOrderNumber": "SO-DEMO-1001",
       "drawingNumbers": [
@@ -94,11 +94,11 @@
       ],
       "archived": false,
       "createdAt": "2026-08-01T08:00:00.000Z",
-      "updatedAt": "2026-09-07T20:54:23.000Z",
-      "engineeringSignOff": false,
-      "engineeringSignOffAt": null,
-      "engineeringSignOffBy": "",
-      "conformanceStatus": "none"
+      "updatedAt": "2026-09-08T06:30:00.000Z",
+      "engineeringSignOff": true,
+      "engineeringSignOffAt": "2026-09-01T10:00:00.000Z",
+      "engineeringSignOffBy": "Demo Engineer",
+      "conformanceStatus": "pending"
     }
   ],
   "tasks": [
@@ -225,7 +225,7 @@
     {
       "id": "task-standalone-rdn-1",
       "projectId": null,
-      "title": "SAMPLE RDN \u2014 Clarification on pile spacing",
+      "title": "SAMPLE RDN — Clarification on pile spacing",
       "description": "Fictional RDN for demo inbox / standalone workflow.",
       "type": "rdn",
       "statusId": "status-in-check",
@@ -245,6 +245,30 @@
       "discipline": "",
       "createdAt": "2026-09-01T08:00:00.000Z",
       "updatedAt": "2026-09-07T20:54:23.000Z"
+    },
+    {
+      "id": "task-6",
+      "projectId": "proj-sample-demo-001",
+      "title": "Site investigation walkdown",
+      "description": "Fictional SAMPLE site investigation checklist and photo log.",
+      "type": "eng_task",
+      "statusId": "status-todo",
+      "assignee": "Demo Engineer",
+      "priority": "medium",
+      "dueDate": "2026-09-25",
+      "phaseId": "phase-site-investigation",
+      "discipline": "Civil",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-09-01T08:00:00.000Z",
+      "updatedAt": "2026-09-08T06:30:00.000Z"
     }
   ]
 }
