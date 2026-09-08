@@ -32,7 +32,7 @@ For host ranking and concrete Cloudflare / Render / Pages steps, see **[DEPLOY.m
 
 Intake · Concept · Design · Check · Drawings · Site investigation · Site/Construction support · Close-out · **Done**
 
-**Current phase** = first phase with open tasks; if every task is done, the terminal (**last**) phase — normally **Done**.
+**Current phase** = first phase with open tasks; if none, `activePhaseId` when set; else **Done** when present and (no tasks / all done); else last phase (never Intake by default).
 
 ### Commercial / SCF project fields
 

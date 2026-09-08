@@ -134,7 +134,8 @@
       "conformanceCert": null,
       "archived": false,
       "createdAt": "2026-07-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T07:00:00.000Z"
+      "updatedAt": "2026-09-08T07:00:00.000Z",
+      "activePhaseId": "ready-phase-done"
     },
     {
       "id": "proj-sample-missing-inv",
@@ -372,7 +373,8 @@
       },
       "archived": true,
       "createdAt": "2026-05-01T08:00:00.000Z",
-      "updatedAt": "2026-08-20T09:00:00.000Z"
+      "updatedAt": "2026-08-20T09:00:00.000Z",
+      "activePhaseId": "arch-phase-done"
     },
     {
       "id": "proj-sample-demo-001",

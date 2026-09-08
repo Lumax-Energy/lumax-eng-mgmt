@@ -405,21 +405,34 @@
       .trim()
       .includes("site investigation");
   }
-  /** Current phase = first phase with open tasks; if none open and project has tasks, last (terminal) phase; else first. */
+  /**
+   * Current phase resolution (Nightly):
+   * 1) First phase that still has open tasks
+   * 2) Else project.activePhaseId if it resolves
+   * 3) Else Done phase when present and (no tasks OR all tasks done)
+   * 4) Else last phase — never silently fall back to Intake when there is no open work
+   */
   function projectCurrentPhase(project) {
     if (!project || !Array.isArray(project.phases) || !project.phases.length) return null;
-    for (let i = 0; i < project.phases.length; i++) {
-      const ph = project.phases[i];
-      const openInPhase = projectTasks(project.id).some(
-        (t) => t.phaseId === ph.id && statusIsOpen(t.statusId)
-      );
+    const phases = project.phases;
+    const pts = projectTasks(project.id);
+    for (let i = 0; i < phases.length; i++) {
+      const ph = phases[i];
+      const openInPhase = pts.some((t) => t.phaseId === ph.id && statusIsOpen(t.statusId));
       if (openInPhase) return ph;
     }
-    const pts = projectTasks(project.id);
-    if (pts.length && pts.every((t) => statusIsDone(t.statusId))) {
-      return project.phases[project.phases.length - 1];
+    // No open tasks
+    if (project.activePhaseId) {
+      const active = phases.find((ph) => ph.id === project.activePhaseId);
+      if (active) return active;
     }
-    return project.phases[0];
+    const noTasks = pts.length === 0;
+    const allDone = pts.length > 0 && pts.every((t) => statusIsDone(t.statusId));
+    if (noTasks || allDone) {
+      const donePh = phases.find((ph) => isDonePhaseName(ph.name));
+      if (donePh) return donePh;
+    }
+    return phases[phases.length - 1];
   }
   function isDonePhaseName(name) {
     return /^done$/i.test(String(name || "").trim());
@@ -832,6 +845,7 @@
       conformanceRef: p.conformanceRef || "",
       conformanceIssuedAt: p.conformanceIssuedAt || null,
       conformanceCert: p.conformanceCert && typeof p.conformanceCert === "object" ? p.conformanceCert : null,
+      activePhaseId: p.activePhaseId || null,
       archived: !!p.archived,
       createdAt: p.createdAt || nowIso(),
       updatedAt: p.updatedAt || nowIso(),
@@ -2415,6 +2429,8 @@
     project.conformanceRef = meta.ref;
     project.conformanceIssuedAt = meta.issuedAt;
     project.conformanceCert = snap;
+    const donePh = (project.phases || []).find((ph) => isDonePhaseName(ph.name));
+    if (donePh) project.activePhaseId = donePh.id;
     project.updatedAt = nowIso();
     cacheDataLocally();
     toast(localSaveHint("Issued " + meta.ref), "success");
