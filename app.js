@@ -1,6 +1,6 @@
 /**
- * Lumax Energy — Engineering Management v2
- * Vanilla JS SPA: Dashboard · Projects · Tasks + GitHub Contents sync + Excel export.
+ * Lumax Energy — Engineering Management v2.1
+ * Vanilla JS SPA: Dashboard · Projects · Tasks + SCF conformance + GitHub sync + Excel.
  */
 (function () {
   "use strict";
@@ -11,7 +11,7 @@
   const DEFAULT_OWNER = "Lumax-Energy";
   const DEFAULT_REPO = "lumax-eng-mgmt";
   const DATA_PATH = "data/projects.json";
-  const APP_VERSION = 2;
+  const APP_VERSION = 2.1;
 
   const DEFAULT_PHASES = [
     { id: "phase-intake", name: "Intake" },
@@ -22,6 +22,7 @@
     { id: "phase-site-investigation", name: "Site investigation" },
     { id: "phase-site", name: "Site/Construction support" },
     { id: "phase-closeout", name: "Close-out" },
+    { id: "phase-done", name: "Done" },
   ];
 
   /** Extensible dashboard / projects filter chips. Add entries here for new views. */
@@ -39,6 +40,12 @@
       hint: "Unique assignees from all tasks",
     },
     {
+      id: "project-types",
+      label: "By project type",
+      kind: "browse-project-types",
+      hint: "Browse projects by project / structure type",
+    },
+    {
       id: "eng-signoff",
       label: "Eng sign-off",
       kind: "filter-projects",
@@ -49,6 +56,42 @@
       label: "Has conformance",
       kind: "filter-projects",
       hint: "Pending or approved (not none)",
+    },
+    {
+      id: "scf-ready",
+      label: "SCF ready",
+      kind: "filter-projects",
+      hint: "INV + contact + address + Done phase — ready to issue",
+    },
+    {
+      id: "scf-issued",
+      label: "SCF issued",
+      kind: "filter-projects",
+      hint: "Conformance approved with LMX-SCF ref",
+    },
+    {
+      id: "commercial-gaps",
+      label: "Commercial gaps",
+      kind: "filter-projects",
+      hint: "Missing invoice, address, or contact person",
+    },
+    {
+      id: "missing-po-pop-inv",
+      label: "Missing PO/POP/INV",
+      kind: "filter-projects",
+      hint: "Missing PO number, POP reference, or invoice number",
+    },
+    {
+      id: "missing-inv",
+      label: "Missing INV",
+      kind: "filter-projects",
+      hint: "No invoice number",
+    },
+    {
+      id: "missing-address",
+      label: "Missing address",
+      kind: "filter-projects",
+      hint: "No site / project address",
     },
     {
       id: "site-investigation",
@@ -63,6 +106,29 @@
     { id: "pending", name: "Pending" },
     { id: "approved", name: "Approved" },
   ];
+
+  const DEFAULT_PROJECT_TYPES = [
+    "PV GM (SteelCore)",
+    "Rooftop ballast",
+    "SAT",
+    "Carport",
+  ];
+
+  const DEFAULT_STRUCTURE_TYPES = [
+    "PV GM (SteelCore)",
+    "Rooftop ballast",
+    "SAT tracker",
+    "Carport",
+    "Ground mount other",
+  ];
+
+  const DEFAULT_ENGINEER = {
+    name: "Demo Pr. Eng. (SAMPLE)",
+    ecsaNo: "ECSA-DEMO-00000",
+    business: "Lumax ENERGY (PTY) Ltd — SAMPLE",
+    address: "Demo Corporate Park North, Midrand 1685",
+    contact: "+27(0) 00 000 0000 · demo-eng@example.invalid",
+  };
 
   const DEFAULT_STATUSES = [
     { id: "status-backlog", name: "Backlog", color: "#6b7c93", category: "todo" },
@@ -111,6 +177,11 @@
       settings: {
         taskStatuses: DEFAULT_STATUSES.map((s) => ({ ...s })),
         myAssignee: "",
+        projectTypes: DEFAULT_PROJECT_TYPES.slice(),
+        structureTypes: DEFAULT_STRUCTURE_TYPES.slice(),
+        engineerDefaults: Object.assign({}, DEFAULT_ENGINEER),
+        scfYear: new Date().getFullYear(),
+        scfSeq: 1,
       },
       projects: [],
       tasks: [],
@@ -243,11 +314,15 @@
     return t ? t.name : typeId || "—";
   }
   function isSample(project) {
+    const code = project.projectCode || "";
+    const client = project.clientName || "";
     return (
       (project.projectName || "").includes("SAMPLE") ||
-      project.projectCode === "DEMO-001" ||
-      project.clientName === "Demo Client" ||
-      project.clientName === "Demo"
+      code === "DEMO-001" ||
+      code.startsWith("DEMO-") ||
+      client === "Demo Client" ||
+      client === "Demo" ||
+      client.startsWith("Demo ")
     );
   }
   function isOverdue(task) {
@@ -330,7 +405,7 @@
       .trim()
       .includes("site investigation");
   }
-  /** Current phase = first phase with open tasks, else first phase. */
+  /** Current phase = first phase with open tasks; if none open and project has tasks, last (terminal) phase; else first. */
   function projectCurrentPhase(project) {
     if (!project || !Array.isArray(project.phases) || !project.phases.length) return null;
     for (let i = 0; i < project.phases.length; i++) {
@@ -340,7 +415,29 @@
       );
       if (openInPhase) return ph;
     }
+    const pts = projectTasks(project.id);
+    if (pts.length && pts.every((t) => statusIsDone(t.statusId))) {
+      return project.phases[project.phases.length - 1];
+    }
     return project.phases[0];
+  }
+  function isDonePhaseName(name) {
+    const n = String(name || "").trim().toLowerCase().replace(/[_]+/g, " ").replace(/\s+/g, " ");
+    return n === "done" || n === "close-out" || n === "close out" || n === "closeout";
+  }
+  function projectInDonePhase(project) {
+    if (!project) return false;
+    const cur = projectCurrentPhase(project);
+    if (!cur) return false;
+    // Terminal Done, or Close-out alias when it is the current phase.
+    return isDonePhaseName(cur.name);
+  }
+  function ensureDonePhase(phases) {
+    const list = Array.isArray(phases) ? phases.slice() : [];
+    if (!list.some((ph) => isDonePhaseName(ph.name))) {
+      list.push({ id: uid("phase"), name: "Done" });
+    }
+    return list;
   }
   function projectInSiteInvestigation(project) {
     if (!project) return false;
@@ -351,6 +448,179 @@
       if (!isSiteInvestigationName(ph.name)) return false;
       return projectTasks(project.id).some((t) => t.phaseId === ph.id && statusIsOpen(t.statusId));
     });
+  }
+  function getProjectTypes() {
+    const list = (state.data.settings && state.data.settings.projectTypes) || [];
+    return list.length ? list.slice() : DEFAULT_PROJECT_TYPES.slice();
+  }
+  function getStructureTypes() {
+    const list = (state.data.settings && state.data.settings.structureTypes) || [];
+    return list.length ? list.slice() : DEFAULT_STRUCTURE_TYPES.slice();
+  }
+  function getEngineerDefaults() {
+    const e = (state.data.settings && state.data.settings.engineerDefaults) || {};
+    return {
+      name: e.name || DEFAULT_ENGINEER.name,
+      ecsaNo: e.ecsaNo || DEFAULT_ENGINEER.ecsaNo,
+      business: e.business || DEFAULT_ENGINEER.business,
+      address: e.address || DEFAULT_ENGINEER.address,
+      contact: e.contact || DEFAULT_ENGINEER.contact,
+    };
+  }
+  function missingCommercialFields(project) {
+    const missing = [];
+    if (!project) return ["project"];
+    if (!(project.invoiceNumber || "").trim()) missing.push("Invoice number");
+    if (!(project.contactPerson || "").trim()) missing.push("Contact person");
+    if (!(project.address || "").trim()) missing.push("Address");
+    return missing;
+  }
+  function missingPoPopInv(project) {
+    const missing = [];
+    if (!project) return ["project"];
+    if (!(project.poNumber || "").trim()) missing.push("PO number");
+    if (!(project.popReference || "").trim()) missing.push("POP reference");
+    if (!(project.invoiceNumber || "").trim()) missing.push("Invoice number");
+    return missing;
+  }
+  function scfIssueBlockers(project) {
+    const missing = missingCommercialFields(project);
+    if (!projectInDonePhase(project)) missing.push("Done phase (current phase must be Done)");
+    return missing;
+  }
+  function canIssueConformance(project) {
+    return !!project && scfIssueBlockers(project).length === 0 && normalizeConformanceStatus(project.conformanceStatus) !== "approved";
+  }
+  function isScfIssued(project) {
+    return (
+      !!project &&
+      normalizeConformanceStatus(project.conformanceStatus) === "approved" &&
+      !!(project.conformanceRef || "").trim()
+    );
+  }
+  function isScfReady(project) {
+    return !!project && scfIssueBlockers(project).length === 0 && !isScfIssued(project);
+  }
+  /** SCF / Structural Compliance Form helpers (static). */
+  class ScfHelper {
+    static formatRef(year, seq) {
+      const y = Number(year) || new Date().getFullYear();
+      const n = Number(seq);
+      const s = !Number.isFinite(n) || n < 1 ? 1 : Math.floor(n);
+      return "LMX-SCF-" + y + "-" + String(s).padStart(3, "0");
+    }
+    static issueDateParts(d) {
+      const dt = d instanceof Date ? d : new Date(d || Date.now());
+      const yyyy = dt.getFullYear();
+      const dd = String(dt.getDate()).padStart(2, "0");
+      const mm = String(dt.getMonth() + 1).padStart(2, "0");
+      return { iso: dt.toISOString(), dateLabel: dd + "/" + mm + "/" + yyyy, year: yyyy };
+    }
+    static allocateRef(settings, issueDate) {
+      const s = settings || {};
+      const parts = ScfHelper.issueDateParts(issueDate);
+      let year = Number(s.scfYear);
+      let seq = Number(s.scfSeq);
+      if (!Number.isFinite(year) || year < 2000) year = parts.year;
+      if (!Number.isFinite(seq) || seq < 1) seq = 1;
+      if (parts.year !== year) {
+        year = parts.year;
+        seq = 1;
+      }
+      const ref = ScfHelper.formatRef(year, seq);
+      s.scfYear = year;
+      s.scfSeq = seq + 1;
+      return { ref, year, seq, issuedAt: parts.iso, dateLabel: parts.dateLabel };
+    }
+    static blockers(project) {
+      return scfIssueBlockers(project);
+    }
+    static canIssue(project) {
+      return canIssueConformance(project);
+    }
+    static snapshot(project, eng, meta) {
+      const e = eng || getEngineerDefaults();
+      return {
+        ref: meta.ref,
+        issuedAt: meta.issuedAt,
+        dateLabel: meta.dateLabel,
+        clientName: (project && project.clientName) || "",
+        projectName: (project && project.projectName) || "",
+        projectCode: (project && project.projectCode) || "",
+        projectType: (project && project.projectType) || "",
+        structureTypes: ((project && project.structureTypes) || []).slice(),
+        address: (project && project.address) || "",
+        contactPerson: (project && project.contactPerson) || "",
+        invoiceNumber: (project && project.invoiceNumber) || "",
+        poNumber: (project && project.poNumber) || "",
+        popReference: (project && project.popReference) || "",
+        drawingNumbers: ((project && project.drawingNumbers) || []).slice(),
+        engineer: {
+          name: e.name || "",
+          ecsaNo: e.ecsaNo || "",
+          business: e.business || "",
+          address: e.address || "",
+          contact: e.contact || "",
+        },
+      };
+    }
+    static certificateHtml(snap) {
+      const s = snap || {};
+      const eng = s.engineer || {};
+      const drawings = (s.drawingNumbers || []).join(" + ") || "—";
+      const pType = s.projectType || (s.structureTypes || [])[0] || "—";
+      return (
+        `<div class="scf-cert" id="scf-cert-print">` +
+        `<div class="scf-cert-top">` +
+        `<div class="scf-ref"><strong>Ref:</strong> ${escapeHtml(s.ref || "")}</div>` +
+        `<div class="scf-date">${escapeHtml(s.dateLabel || "")}</div>` +
+        `</div>` +
+        `<h1 class="scf-title">STRUCTURAL COMPLIANCE FORM</h1>` +
+        `<p class="scf-intro">As a practising Structural Engineer and registered as a Professional Engineer Technologist under the provisions of the Engineering Profession Act, 2000 (Act No. 46 of 2000), I hereby certify that the Photovoltaic Mounting system (${escapeHtml(pType)}) analysed complies with the National Building Regulations, SANS 10400-Part B — Structural Design Building Regulations.</p>` +
+        `<div class="scf-grid">` +
+        `<section><h2>Project Details</h2>` +
+        `<table class="scf-table"><tbody>` +
+        `<tr><th>Client Name</th><td>${escapeHtml(s.clientName || "—")}</td><th>Invoice No.</th><td>${escapeHtml(s.invoiceNumber || "—")}</td></tr>` +
+        `<tr><th>Project Name</th><td>${escapeHtml(s.projectName || "—")}</td><th>Drawing No.</th><td>${escapeHtml(drawings)}</td></tr>` +
+        `<tr><th>Project Type</th><td colspan="3">${escapeHtml(pType)}</td></tr>` +
+        `<tr><th>Address</th><td colspan="3">${escapeHtml(s.address || "—")}</td></tr>` +
+        `<tr><th>Contact Person</th><td colspan="3">${escapeHtml(s.contactPerson || "—")}</td></tr>` +
+        `</tbody></table></section>` +
+        `<section><h2>Practising Engineer Details</h2>` +
+        `<table class="scf-table"><tbody>` +
+        `<tr><th>Pr. Engineer</th><td>${escapeHtml(eng.name || "—")}</td></tr>` +
+        `<tr><th>ECSA No.</th><td>${escapeHtml(eng.ecsaNo || "—")}</td></tr>` +
+        `<tr><th>Business Name</th><td>${escapeHtml(eng.business || "—")}</td></tr>` +
+        `<tr><th>Business Address</th><td>${escapeHtml(eng.address || "—")}</td></tr>` +
+        `<tr><th>Contact Details</th><td>${escapeHtml(eng.contact || "—")}</td></tr>` +
+        `</tbody></table></section>` +
+        `</div>` +
+        `<div class="scf-notes">` +
+        `<p>We respectfully direct the client's attention to the stipulations outlined in Regulation 11(2) of the Construction Regulations 2014, which are derived from the Occupational Health &amp; Safety Act No. 85 of 1993. This regulation mandates that any structure must undergo periodic inspection by competent individuals to ensure its ongoing safety and integrity.</p>` +
+        `<p>It is imperative to note that this form does not imply acceptance of any site work performed by the contractor if it deviates from the building code or the contractual specifications outlined in the project documents.</p>` +
+        `<p>This document is not a replacement or substitute for “Form 2” or “Form 4”. It is strongly recommended that you apply for building approval from the applicable local authority/Municipality.</p>` +
+        `</div>` +
+        `<div class="scf-sign">` +
+        `<p>Yours faithfully,</p>` +
+        `<p><strong>${escapeHtml(eng.name || "")}</strong><br/>Pr. Eng.<br/>${escapeHtml(eng.contact || "")}</p>` +
+        `</div></div>`
+      );
+    }
+  }
+  function nextScfRef() {
+    const settings = state.data.settings || (state.data.settings = {});
+    return ScfHelper.allocateRef(settings, new Date()).ref;
+  }
+  function uniqueProjectTypes() {
+    const set = new Set(getProjectTypes());
+    (state.data.projects || []).forEach((p) => {
+      const t = (p.projectType || "").trim();
+      if (t) set.add(t);
+      (p.structureTypes || []).forEach((s) => {
+        if ((s || "").trim()) set.add(s.trim());
+      });
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
   }
   function uniqueClients() {
     const set = new Set();
@@ -383,12 +653,46 @@
       projects = projects.filter((p) => !!p.engineeringSignOff);
     } else if (viewId === "conformance") {
       projects = projects.filter((p) => hasConformance(p));
+    } else if (viewId === "scf-ready") {
+      projects = projects.filter((p) => isScfReady(p));
+    } else if (viewId === "scf-issued") {
+      projects = projects.filter((p) => isScfIssued(p));
+    } else if (viewId === "commercial-gaps") {
+      projects = projects.filter((p) => missingCommercialFields(p).length > 0);
+    } else if (viewId === "missing-po-pop-inv") {
+      projects = projects.filter((p) => missingPoPopInv(p).length > 0);
+    } else if (viewId === "missing-inv") {
+      projects = projects.filter((p) => !(p.invoiceNumber || "").trim());
+    } else if (viewId === "missing-address") {
+      projects = projects.filter((p) => !(p.address || "").trim());
     } else if (viewId === "site-investigation") {
       projects = projects.filter((p) => projectInSiteInvestigation(p));
+    } else if (viewId && String(viewId).startsWith("type:")) {
+      const want = String(viewId).slice(5).toLowerCase();
+      projects = projects.filter((p) => {
+        const pt = (p.projectType || "").toLowerCase();
+        if (pt === want) return true;
+        return (p.structureTypes || []).some((s) => String(s).toLowerCase() === want);
+      });
     }
     if (q) {
       projects = projects.filter((p) => {
-        const hay = [p.clientName, p.projectCode, p.salesOrderNumber, p.projectName].join(" ").toLowerCase();
+        const hay = [
+          p.clientName,
+          p.projectCode,
+          p.salesOrderNumber,
+          p.projectName,
+          p.poNumber,
+          p.popReference,
+          p.invoiceNumber,
+          p.address,
+          p.contactPerson,
+          p.projectType,
+          p.conformanceRef,
+          (p.structureTypes || []).join(" "),
+        ]
+          .join(" ")
+          .toLowerCase();
         return hay.includes(q);
       });
     }
@@ -418,12 +722,40 @@
       }
     });
 
+    const projectTypes =
+      Array.isArray(settingsIn.projectTypes) && settingsIn.projectTypes.length
+        ? settingsIn.projectTypes.map((x) => String(x || "").trim()).filter(Boolean)
+        : DEFAULT_PROJECT_TYPES.slice();
+    const structureTypes =
+      Array.isArray(settingsIn.structureTypes) && settingsIn.structureTypes.length
+        ? settingsIn.structureTypes.map((x) => String(x || "").trim()).filter(Boolean)
+        : DEFAULT_STRUCTURE_TYPES.slice();
+    const engIn = settingsIn.engineerDefaults && typeof settingsIn.engineerDefaults === "object"
+      ? settingsIn.engineerDefaults
+      : {};
+    const engineerDefaults = {
+      name: engIn.name || DEFAULT_ENGINEER.name,
+      ecsaNo: engIn.ecsaNo || DEFAULT_ENGINEER.ecsaNo,
+      business: engIn.business || DEFAULT_ENGINEER.business,
+      address: engIn.address || DEFAULT_ENGINEER.address,
+      contact: engIn.contact || DEFAULT_ENGINEER.contact,
+    };
+    let scfYear = Number(settingsIn.scfYear);
+    if (!Number.isFinite(scfYear) || scfYear < 2000) scfYear = new Date().getFullYear();
+    let scfSeq = Number(settingsIn.scfSeq);
+    if (!Number.isFinite(scfSeq) || scfSeq < 1) scfSeq = 1;
+
     const data = {
       version: APP_VERSION,
       updatedAt: json.updatedAt || nowIso(),
       settings: {
         taskStatuses,
         myAssignee: settingsIn.myAssignee || "",
+        projectTypes,
+        structureTypes,
+        engineerDefaults,
+        scfYear,
+        scfSeq,
       },
       projects: [],
       tasks: [],
@@ -475,13 +807,24 @@
     } else {
       phases = DEFAULT_PHASES.map((ph) => ({ id: uid("phase"), name: ph.name }));
     }
+    phases = ensureDonePhase(phases);
     const engineeringSignOff = !!p.engineeringSignOff;
+    const structureTypes = Array.isArray(p.structureTypes)
+      ? p.structureTypes.map((x) => String(x || "").trim()).filter(Boolean)
+      : [];
     return {
       id: p.id || uid("proj"),
       clientName: p.clientName || "",
       projectName: p.projectName || "",
       projectCode: p.projectCode || "",
       salesOrderNumber: p.salesOrderNumber || "",
+      poNumber: p.poNumber || "",
+      popReference: p.popReference || "",
+      invoiceNumber: p.invoiceNumber || "",
+      address: p.address || "",
+      contactPerson: p.contactPerson || "",
+      projectType: p.projectType || "",
+      structureTypes,
       drawingNumbers: Array.isArray(p.drawingNumbers) ? p.drawingNumbers.slice() : [],
       customFields: p.customFields && typeof p.customFields === "object" ? { ...p.customFields } : {},
       phases,
@@ -489,6 +832,9 @@
       engineeringSignOffAt: engineeringSignOff ? p.engineeringSignOffAt || null : p.engineeringSignOffAt || null,
       engineeringSignOffBy: p.engineeringSignOffBy || "",
       conformanceStatus: normalizeConformanceStatus(p.conformanceStatus),
+      conformanceRef: p.conformanceRef || "",
+      conformanceIssuedAt: p.conformanceIssuedAt || null,
+      conformanceCert: p.conformanceCert && typeof p.conformanceCert === "object" ? p.conformanceCert : null,
       archived: !!p.archived,
       createdAt: p.createdAt || nowIso(),
       updatedAt: p.updatedAt || nowIso(),
@@ -980,12 +1326,21 @@
           Name: p.projectName,
           Client: p.clientName,
           "Sales order": p.salesOrderNumber,
+          "PO number": p.poNumber || "",
+          "POP reference": p.popReference || "",
+          INV: p.invoiceNumber || "",
+          Address: p.address || "",
+          Contact: p.contactPerson || "",
+          Type: p.projectType || "",
+          "Structure types": (p.structureTypes || []).join("; "),
           "Phase count": (p.phases || []).length,
           "Current phase": cur ? cur.name : "",
           "Eng sign-off": p.engineeringSignOff ? "yes" : "no",
           "Eng sign-off at": p.engineeringSignOffAt || "",
           "Eng sign-off by": p.engineeringSignOffBy || "",
           Conformance: conformanceLabel(p.conformanceStatus),
+          "Conformance ref": p.conformanceRef || "",
+          "Conformance issued at": p.conformanceIssuedAt || "",
           "Open tasks": pts.filter((t) => statusIsOpen(t.statusId)).length,
           Overdue: pts.filter((t) => isOverdue(t)).length,
           Blocked: pts.filter((t) => statusIsBlocked(t.statusId)).length,
@@ -1087,13 +1442,39 @@
       description: "", updatedAt: "",
     }));
 
+    const scfRows = allProjects
+      .slice()
+      .sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || ""))
+      .map((p) => {
+        const eng = getEngineerDefaults();
+        return {
+          "Conformance ref": p.conformanceRef || "",
+          Status: conformanceLabel(p.conformanceStatus),
+          Issued: p.conformanceIssuedAt || "",
+          Client: p.clientName || "",
+          "Project name": p.projectName || "",
+          "Project code": p.projectCode || "",
+          INV: p.invoiceNumber || "",
+          PO: p.poNumber || "",
+          POP: p.popReference || "",
+          Address: p.address || "",
+          Contact: p.contactPerson || "",
+          Type: p.projectType || "",
+          "Structure types": (p.structureTypes || []).join("; "),
+          Drawings: (p.drawingNumbers || []).join("; "),
+          "Eng name": eng.name,
+          "ECSA no": eng.ecsaNo,
+          Business: eng.business,
+        };
+      });
+
     const wb = XLSX.utils.book_new();
-    // Exact order per Researchy:
-    // 1 Dashboard 2 All Tasks 3 Projects 4 By Assignee 5 By Client 6 By Project
-    // 7 RDN 8 Design Checks 9 Drawings 10 Eng Tasks 11 Summary
+    // 1 Dashboard 2 All Tasks 3 Projects 4 SCF 5 By Assignee 6 By Client 7 By Project
+    // 8 RDN 9 Design Checks 10 Drawings 11 Eng Tasks 12 Summary
     appendSheet(wb, "Dashboard", XLSX.utils.aoa_to_sheet(dash));
     appendSheet(wb, "All Tasks", sheetFromRows(allTaskRows, emptyHeaders));
-    appendSheet(wb, "Projects", sheetFromRows(projRows, ["Code", "Name", "Client", "Eng sign-off", "Conformance"]));
+    appendSheet(wb, "Projects", sheetFromRows(projRows, ["Code", "Name", "Client", "PO number", "INV", "Conformance ref"]));
+    appendSheet(wb, "SCF", sheetFromRows(scfRows, ["Conformance ref", "Status", "Client", "INV"]));
     appendSheet(wb, "By Assignee", sheetFromRows(byAssigneeRows, emptyHeaders));
     appendSheet(wb, "By Client", sheetFromRows(byClientRows, emptyHeaders));
     appendSheet(wb, "By Project", sheetFromRows(byProjectRows, emptyHeaders));
@@ -1106,8 +1487,8 @@
     XLSX.writeFile(wb, "lumax-eng-mgmt.xlsx");
     toast(
       filterActive
-        ? "Exported Excel (All Tasks + type sheets filter-scoped; Dashboard/Projects/Summary/By-* full)"
-        : "Exported Excel workbook (11 sheets)",
+        ? "Exported Excel (All Tasks + type sheets filter-scoped; Dashboard/Projects/SCF/Summary/By-* full)"
+        : "Exported Excel workbook (12 sheets)",
       "success"
     );
   }
@@ -1170,7 +1551,6 @@
   }
 
   function activateDashboardView(id) {
-    const def = id ? getDashboardView(id) : null;
     if (!id) {
       state.dashboardView = null;
       state.projectFilters.client = "";
@@ -1178,9 +1558,17 @@
       render();
       return;
     }
+    if (String(id).startsWith("type:")) {
+      state.dashboardView = id;
+      state.projectFilters.dashboardView = id;
+      if (state.view === "dashboard" || state.view === "projects") render();
+      else setView("projects");
+      return;
+    }
+    const def = getDashboardView(id);
     if (!def) return;
 
-    if (def.kind === "browse-clients" || def.kind === "browse-assignees") {
+    if (def.kind === "browse-clients" || def.kind === "browse-assignees" || def.kind === "browse-project-types") {
       state.dashboardView = id;
       state.projectFilters.dashboardView = null;
       // Browse lists live on the dashboard
@@ -1284,6 +1672,88 @@
       return;
     }
 
+    if (viewDef && viewDef.kind === "browse-project-types") {
+      const types = uniqueProjectTypes();
+      root.innerHTML =
+        renderViewChips(state.dashboardView) +
+        `<div class="dash-view-panel">` +
+        `<h2>By project / structure type <span class="stat-sub">(${types.length})</span></h2>` +
+        `<p class="hint">Click a type to list matching projects (projectType or structureTypes).</p>` +
+        `<div class="browse-chip-grid">` +
+        (types.length
+          ? types
+              .map((t) => {
+                const n = (state.data.projects || []).filter((p) => {
+                  if (p.archived) return false;
+                  if ((p.projectType || "") === t) return true;
+                  return (p.structureTypes || []).includes(t);
+                }).length;
+                return (
+                  `<button type="button" class="browse-card" data-ptype="${escapeHtml(t)}">` +
+                  `<div class="browse-card-title">${escapeHtml(t)}</div>` +
+                  `<div class="stat-sub">${n} active project(s)</div>` +
+                  `</button>`
+                );
+              })
+              .join("")
+          : `<div class="empty-state">No project types yet — add some in Settings</div>`) +
+        `</div></div>`;
+      bindViewChips(root);
+      root.querySelectorAll("[data-ptype]").forEach((btn) => {
+        btn.onclick = () => {
+          state.dashboardView = "type:" + btn.dataset.ptype;
+          state.projectFilters.dashboardView = state.dashboardView;
+          setView("projects");
+        };
+      });
+      return;
+    }
+
+    if (String(state.dashboardView || "").startsWith("type:")) {
+      const want = String(state.dashboardView).slice(5);
+      const projects = projectsMatchingFilters();
+      root.innerHTML =
+        renderViewChips("project-types") +
+        `<div class="dash-view-panel">` +
+        `<h2>Type: ${escapeHtml(want)} <span class="stat-sub">(${projects.length})</span></h2>` +
+        `<p class="hint">Projects with this projectType or structure type. Open in Projects to continue.</p>` +
+        `<div class="project-grid" id="dash-filtered-projects"></div>` +
+        `<div class="dash-view-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-open-filtered-projects">Open in Projects</button></div>` +
+        `</div>`;
+      const grid = root.querySelector("#dash-filtered-projects");
+      if (!projects.length) {
+        grid.innerHTML = '<div class="empty-state">No projects match this type.</div>';
+      } else {
+        grid.innerHTML = projects
+          .map((p) => {
+            const cur = projectCurrentPhase(p);
+            return (
+              `<article class="project-card${p.archived ? " archived" : ""}${projectAtRisk(p) ? " at-risk" : ""}" data-id="${escapeHtml(p.id)}" tabindex="0" role="button">` +
+              `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
+              `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
+              `<div class="meta">${escapeHtml(p.clientName || "No client")} · ${escapeHtml(p.projectType || "—")}</div>` +
+              (isScfIssued(p) ? `<span class="pill conformance">${escapeHtml(p.conformanceRef)}</span> ` : "") +
+              (cur ? `<div class="stat-sub">Current: ${escapeHtml(cur.name)}</div>` : "") +
+              `</article>`
+            );
+          })
+          .join("");
+        grid.querySelectorAll(".project-card").forEach((card) => {
+          card.addEventListener("click", () => openProject(card.dataset.id));
+          card.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openProject(card.dataset.id);
+            }
+          });
+        });
+      }
+      bindViewChips(root);
+      const openBtn = root.querySelector("#btn-open-filtered-projects");
+      if (openBtn) openBtn.onclick = () => setView("projects");
+      return;
+    }
+
     if (viewDef && viewDef.kind === "filter-projects") {
       const projects = projectsMatchingFilters();
       root.innerHTML =
@@ -1294,8 +1764,14 @@
         (viewDef.id === "conformance"
           ? ' — <em>Has conformance</em> means status is <strong>pending</strong> or <strong>approved</strong> (not none).'
           : "") +
+        (viewDef.id === "scf-ready"
+          ? " — Requires invoice, contact, address, and current phase <strong>Done</strong>."
+          : "") +
+        (viewDef.id === "scf-issued"
+          ? " — Approved with an <strong>LMX-SCF-YYYY-NNN</strong> reference."
+          : "") +
         (viewDef.id === "site-investigation"
-          ? " — Current phase = first phase with open tasks, else first phase."
+          ? " — Current phase = first phase with open tasks; if all tasks done, terminal phase."
           : "") +
         `</p>` +
         `<div class="project-grid" id="dash-filtered-projects"></div>` +
@@ -1389,14 +1865,17 @@
     const signOffN = (state.data.projects || []).filter((p) => !p.archived && p.engineeringSignOff).length;
     const confN = (state.data.projects || []).filter((p) => !p.archived && hasConformance(p)).length;
     const siteN = (state.data.projects || []).filter((p) => !p.archived && projectInSiteInvestigation(p)).length;
+    const scfReadyN = (state.data.projects || []).filter((p) => !p.archived && isScfReady(p)).length;
+    const scfIssuedN = (state.data.projects || []).filter((p) => !p.archived && isScfIssued(p)).length;
+    const gapN = (state.data.projects || []).filter((p) => !p.archived && missingCommercialFields(p).length > 0).length;
 
     root.innerHTML =
       renderViewChips(state.dashboardView) +
       `<div class="dash-grid">` +
       `<div class="dash-card span-3"><h3>Open tasks</h3><div class="stat-big">${open.length}</div><div class="stat-sub">${overdue.length} overdue · ${due7.length} due in 7d</div></div>` +
       `<div class="dash-card span-3"><h3>Standalone</h3><div class="stat-big">${tasks.filter((t) => !t.projectId && statusIsOpen(t.statusId)).length}</div><div class="stat-sub">open without project</div></div>` +
-      `<div class="dash-card span-3"><h3>Blocked</h3><div class="stat-big">${tasks.filter((t) => statusIsBlocked(t.statusId)).length}</div><div class="stat-sub">need unblock</div></div>` +
-      `<div class="dash-card span-3"><h3>Active projects</h3><div class="stat-big">${(state.data.projects || []).filter((p) => !p.archived).length}</div><div class="stat-sub">${risk.length} at risk · ${signOffN} sign-off · ${confN} conformance · ${siteN} site inv.</div></div>` +
+      `<div class="dash-card span-3"><h3>SCF</h3><div class="stat-big">${scfReadyN}</div><div class="stat-sub">${scfIssuedN} issued · ${gapN} commercial gaps · ${confN} conformance</div></div>` +
+      `<div class="dash-card span-3"><h3>Active projects</h3><div class="stat-big">${(state.data.projects || []).filter((p) => !p.archived).length}</div><div class="stat-sub">${risk.length} at risk · ${signOffN} sign-off · ${siteN} site inv.</div></div>` +
       `<div class="dash-card span-6"><h3>Open by status</h3><div class="status-bars">` +
       byStatus
         .map((x) => {
@@ -1503,7 +1982,9 @@
       root.insertBefore(chipsHost, toolbar ? toolbar.nextSibling : root.firstChild);
     }
     // Keep filter-project chips in sync with dashboardViews (browse chips still useful)
-    const filterViews = DASHBOARD_VIEWS.filter((v) => v.kind === "filter-projects" || v.kind === "browse-clients");
+    const filterViews = DASHBOARD_VIEWS.filter(
+      (v) => v.kind === "filter-projects" || v.kind === "browse-clients" || v.kind === "browse-project-types"
+    );
     const activeId = state.dashboardView;
     chipsHost.innerHTML =
       `<div class="view-chips" role="toolbar" aria-label="Project views">` +
@@ -1522,6 +2003,9 @@
       (activeId === "conformance"
         ? `<span class="view-chip-meta hint-inline">Has conformance = pending | approved</span>`
         : "") +
+      (activeId && String(activeId).startsWith("type:")
+        ? `<span class="view-chip-meta">Type: <strong>${escapeHtml(String(activeId).slice(5))}</strong></span>`
+        : "") +
       `</div>`;
 
     chipsHost.querySelectorAll("[data-proj-view]").forEach((btn) => {
@@ -1537,9 +2021,8 @@
         }
         const def = getDashboardView(id);
         if (!def) return;
-        if (def.kind === "browse-clients") {
-          // On projects page: cycle client via prompt-less browse — jump to dashboard clients view
-          state.dashboardView = "clients";
+        if (def.kind === "browse-clients" || def.kind === "browse-project-types") {
+          state.dashboardView = def.id;
           setView("dashboard");
           return;
         }
@@ -1581,12 +2064,26 @@
           `<article class="project-card${p.archived ? " archived" : ""}${projectAtRisk(p) ? " at-risk" : ""}" data-id="${escapeHtml(p.id)}" tabindex="0" role="button">` +
           `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
           `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
-          `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}</div>` +
+          `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}` +
+          (p.projectType ? ` · ${escapeHtml(p.projectType)}` : "") +
+          `</div>` +
           (isSample(p) ? '<span class="sample-tag">SAMPLE</span>' : "") +
           (p.archived ? '<span class="sample-tag" style="background:#eee;color:#555">ARCHIVED</span>' : "") +
           (p.engineeringSignOff ? '<span class="pill signoff">Eng sign-off</span>' : "") +
-          (hasConformance(p) ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span>` : "") +
-          (cur ? `<div class="stat-sub">Phase: ${escapeHtml(cur.name)}</div>` : "") +
+          (isScfIssued(p)
+            ? `<span class="pill conformance issued">${escapeHtml(p.conformanceRef || "SCF issued")}</span>`
+            : hasConformance(p)
+              ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span>`
+              : "") +
+          (isScfReady(p) ? '<span class="pill scf-ready">SCF ready</span>' : "") +
+          (!(p.invoiceNumber || "").trim() ? '<span class="pill gap">No INV</span>' : "") +
+          (!(p.address || "").trim() ? '<span class="pill gap">No address</span>' : "") +
+          (cur ? `<div class="stat-sub">Phase: ${escapeHtml(cur.name)}` +
+            (p.poNumber || p.popReference || p.invoiceNumber
+              ? ` · PO ${escapeHtml(p.poNumber || "—")} · INV ${escapeHtml(p.invoiceNumber || "—")}`
+              : "") +
+            `</div>`
+            : "") +
           `<div class="task-summary">` +
           `<span class="pill open">${open} open</span>` +
           (blocked ? `<span class="pill blocked">${blocked} blocked</span>` : "") +
@@ -1642,6 +2139,10 @@
       (t) => state.selectedPhaseId === "all" || t.phaseId === state.selectedPhaseId
     );
 
+    const blockers = scfIssueBlockers(p);
+    const issued = isScfIssued(p);
+    const issueEnabled = blockers.length === 0 && !issued;
+
     root.innerHTML =
       `<div class="detail-header">` +
       `<div class="breadcrumb"><button type="button" id="btn-back">← All projects</button></div>` +
@@ -1650,12 +2151,24 @@
       `<span><strong>Client:</strong> ${escapeHtml(p.clientName)}</span>` +
       `<span><strong>Code:</strong> ${escapeHtml(p.projectCode)}</span>` +
       `<span><strong>SO:</strong> ${escapeHtml(p.salesOrderNumber)}</span>` +
+      `<span><strong>PO:</strong> ${escapeHtml(p.poNumber || "—")}</span>` +
+      `<span><strong>POP:</strong> ${escapeHtml(p.popReference || "—")}</span>` +
+      `<span><strong>INV:</strong> ${escapeHtml(p.invoiceNumber || "—")}</span>` +
+      `<span><strong>Type:</strong> ${escapeHtml(p.projectType || "—")}</span>` +
+      ((p.structureTypes || []).length
+        ? `<span><strong>Structures:</strong> ${escapeHtml((p.structureTypes || []).join(", "))}</span>`
+        : "") +
+      `<span><strong>Address:</strong> ${escapeHtml(p.address || "—")}</span>` +
+      `<span><strong>Contact:</strong> ${escapeHtml(p.contactPerson || "—")}</span>` +
       `<span><strong>Eng sign-off:</strong> ${p.engineeringSignOff ? "Yes" : "No"}` +
       (p.engineeringSignOff && (p.engineeringSignOffBy || p.engineeringSignOffAt)
         ? ` (${escapeHtml([p.engineeringSignOffBy, p.engineeringSignOffAt].filter(Boolean).join(" · "))})`
         : "") +
       `</span>` +
-      `<span><strong>Conformance:</strong> ${escapeHtml(conformanceLabel(p.conformanceStatus))}</span>` +
+      `<span><strong>Conformance:</strong> ${escapeHtml(conformanceLabel(p.conformanceStatus))}` +
+      (p.conformanceRef ? ` · ${escapeHtml(p.conformanceRef)}` : "") +
+      (p.conformanceIssuedAt ? ` · ${escapeHtml(String(p.conformanceIssuedAt).slice(0, 10))}` : "") +
+      `</span>` +
       (() => {
         const cur = projectCurrentPhase(p);
         return cur ? `<span><strong>Current phase:</strong> ${escapeHtml(cur.name)}</span>` : "";
@@ -1664,9 +2177,39 @@
       `</div>` +
       `<div class="drawings-list"><strong>Drawings:</strong> ${drawings}</div>` +
       (customs ? `<div class="custom-fields-list" style="margin-top:0.4rem">${customs}</div>` : "") +
+      `<div class="scf-gate">` +
+      `<div class="scf-gate-title"><strong>Structural Compliance Form (SCF)</strong>` +
+      (issued
+        ? ` — issued <code>${escapeHtml(p.conformanceRef || "")}</code>`
+        : issueEnabled
+          ? " — ready to issue"
+          : " — Issue disabled until checklist is complete") +
+      `</div>` +
+      (issued
+        ? ""
+        : `<ul class="scf-checklist">` +
+          [
+            ["Invoice number (INV)", !!(p.invoiceNumber || "").trim()],
+            ["Contact person", !!(p.contactPerson || "").trim()],
+            ["Address", !!(p.address || "").trim()],
+            ["Current phase is Done (Close-out aliases)", projectInDonePhase(p)],
+          ]
+            .map(
+              ([label, ok]) =>
+                `<li class="${ok ? "ok" : "missing"}">${ok ? "✓" : "○"} ${escapeHtml(label)}</li>`
+            )
+            .join("") +
+          `</ul>`) +
+      `</div>` +
       `<div class="detail-actions" style="margin-top:0.85rem">` +
       `<button type="button" class="btn btn-sm" id="btn-new-task">+ Task</button>` +
       `<button type="button" class="btn btn-secondary btn-sm" id="btn-edit-project">Edit project</button>` +
+      `<button type="button" class="btn btn-sm" id="btn-issue-scf"${issueEnabled ? "" : " disabled"} title="${escapeHtml(issueEnabled ? "Issue Structural Compliance Form (LMX-SCF-YYYY-NNN)" : blockers.length ? "Missing: " + blockers.join(", ") : "Already issued")}">Issue SCF</button>` +
+      (issued || (p.conformanceCert && p.conformanceCert.ref)
+        ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-preview-scf">View / print SCF</button>`
+        : issueEnabled
+          ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-preview-scf" title="Draft preview (not issued)">Preview draft SCF</button>`
+          : "") +
       `<button type="button" class="btn btn-secondary btn-sm" id="btn-archive">${p.archived ? "Unarchive" : "Archive"}</button>` +
       `</div></div>` +
       `<div class="phase-tabs">${phaseTabs}</div>` +
@@ -1677,6 +2220,10 @@
     root.querySelector("#btn-back").addEventListener("click", () => setView("projects"));
     root.querySelector("#btn-new-task").addEventListener("click", () => openTaskForm(null, { projectId: p.id }));
     root.querySelector("#btn-edit-project").addEventListener("click", () => openProjectForm(p.id));
+    const issueBtn = root.querySelector("#btn-issue-scf");
+    if (issueBtn) issueBtn.addEventListener("click", () => issueConformance(p));
+    const prevBtn = root.querySelector("#btn-preview-scf");
+    if (prevBtn) prevBtn.addEventListener("click", () => openScfPreview(p));
     root.querySelector("#btn-archive").addEventListener("click", () => {
       p.archived = !p.archived;
       p.updatedAt = nowIso();
@@ -1843,10 +2390,166 @@
     ov.onclick = null;
   }
 
+  function issueConformance(project) {
+    if (!project) return;
+    const blockers = ScfHelper.blockers(project);
+    if (blockers.length) {
+      toast("Cannot issue SCF — missing: " + blockers.join("; "), "error");
+      return;
+    }
+    if (isScfIssued(project)) {
+      toast("SCF already issued as " + (project.conformanceRef || "approved"), "error");
+      openScfPreview(project);
+      return;
+    }
+    if (
+      !confirm(
+        "Issue Structural Compliance Form for " +
+          (project.projectCode || project.projectName || "this project") +
+          "?\n\nAllocates next LMX-SCF-YYYY-NNN and stores a certificate snapshot."
+      )
+    ) {
+      return;
+    }
+    const settings = state.data.settings || (state.data.settings = {});
+    const meta = ScfHelper.allocateRef(settings, new Date());
+    const snap = ScfHelper.snapshot(project, getEngineerDefaults(), meta);
+    project.conformanceStatus = "approved";
+    project.conformanceRef = meta.ref;
+    project.conformanceIssuedAt = meta.issuedAt;
+    project.conformanceCert = snap;
+    project.updatedAt = nowIso();
+    cacheDataLocally();
+    toast(localSaveHint("Issued " + meta.ref), "success");
+    render();
+    openScfPreview(project);
+  }
+
+  function buildScfHtml(project) {
+    const snap = project && project.conformanceCert;
+    const eng = (snap && snap.engineer) || getEngineerDefaults();
+    const drawings = ((snap && snap.drawingNumbers) || project.drawingNumbers || []).join(" + ") || "—";
+    const struct =
+      (snap && snap.projectType) ||
+      (project.structureTypes || []).join(", ") ||
+      project.projectType ||
+      "Photovoltaic mounting system";
+    const ref = (snap && snap.ref) || project.conformanceRef || "LMX-SCF-DRAFT";
+    const issued =
+      (snap && snap.dateLabel) ||
+      (project.conformanceIssuedAt
+        ? ScfHelper.issueDateParts(project.conformanceIssuedAt).dateLabel
+        : ScfHelper.issueDateParts(new Date()).dateLabel);
+    const certType = (snap && snap.projectType) || project.projectType || struct;
+    const clientName = (snap && snap.clientName) || project.clientName || "—";
+    const projectName = (snap && snap.projectName) || project.projectName || "—";
+    const invoiceNumber = (snap && snap.invoiceNumber) || project.invoiceNumber || "—";
+    const address = (snap && snap.address) || project.address || "—";
+    const contactPerson = (snap && snap.contactPerson) || project.contactPerson || "—";
+    const poNumber = (snap && snap.poNumber) || project.poNumber || "";
+    const popReference = (snap && snap.popReference) || project.popReference || "";
+    return (
+      "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
+      "<title>" +
+      escapeHtml(ref) +
+      " — Structural Compliance Form</title>" +
+      "<style>" +
+      "body{font-family:Georgia,'Times New Roman',serif;max-width:820px;margin:24px auto;padding:0 16px;color:#111;line-height:1.45}" +
+      "h1{font-size:1.25rem;letter-spacing:0.04em;margin:1.2rem 0 0.6rem}" +
+      ".ref{white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace;font-size:0.92rem;border-bottom:1px solid #333;padding-bottom:0.35rem;margin-bottom:1rem}" +
+      "table{width:100%;border-collapse:collapse;margin:0.75rem 0 1.1rem}" +
+      "td{border:1px solid #333;padding:0.45rem 0.55rem;vertical-align:top;font-size:0.95rem}" +
+      "td.lbl{width:22%;font-weight:700;background:#f4f6f8}" +
+      ".note{font-size:0.9rem;margin:0.55rem 0}" +
+      ".sign{margin-top:1.6rem}" +
+      "@media print{body{margin:12mm} .no-print{display:none}}" +
+      "</style></head><body>" +
+      "<div class='no-print' style='margin-bottom:12px'>" +
+      "<button onclick='window.print()'>Print</button> " +
+      "<button onclick='window.close()'>Close</button>" +
+      "<p style='font-size:12px;color:#666'>SAMPLE / fictional preview — not a legal certificate.</p></div>" +
+      "<div class='ref'>Ref: " +
+      escapeHtml(ref) +
+      " ________________________________ " +
+      escapeHtml(issued) +
+      "</div>" +
+      "<h1>STRUCTURAL COMPLIANCE FORM:</h1>" +
+      "<p>As a practising Structural Engineer and registered as a Professional Engineer / Technologist under the provisions of the Engineering Profession Act, 2000 (Act No. 46 of 2000), I hereby certify that the " +
+      escapeHtml(certType) +
+      " analysed complies with the National Building Regulations, SANS 10400-Part B — Structural Design Building Regulations.</p>" +
+      "<h1>Project Details</h1>" +
+      "<table>" +
+      "<tr><td class='lbl'>Client Name</td><td>" +
+      escapeHtml(clientName) +
+      "</td><td class='lbl'>Invoice No.</td><td>" +
+      escapeHtml(invoiceNumber) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>Project Name</td><td>" +
+      escapeHtml(projectName) +
+      "</td><td class='lbl'>Drawing No.</td><td>" +
+      escapeHtml(drawings) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>Project Type</td><td colspan='3'>" +
+      escapeHtml(struct) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>Address</td><td colspan='3'>" +
+      escapeHtml(address) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>Contact Person</td><td colspan='3'>" +
+      escapeHtml(contactPerson) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>PO / POP</td><td colspan='3'>" +
+      escapeHtml([poNumber, popReference].filter(Boolean).join(" · ") || "—") +
+      "</td></tr>" +
+      "</table>" +
+      "<h1>Practising Engineer Details</h1>" +
+      "<table>" +
+      "<tr><td class='lbl'>Pr. Engineer</td><td>" +
+      escapeHtml(eng.name) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>ECSA No.</td><td>" +
+      escapeHtml(eng.ecsaNo) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>Business Name</td><td>" +
+      escapeHtml(eng.business) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>Business Address</td><td>" +
+      escapeHtml(eng.address) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>Contact Details</td><td>" +
+      escapeHtml(eng.contact) +
+      "</td></tr>" +
+      "</table>" +
+      "<p class='note'>We respectfully direct the client's attention to the stipulations outlined in Regulation 11(2) of the Construction Regulations 2014, which are derived from the Occupational Health &amp; Safety Act No. 85 of 1993. This regulation mandates that any structure must undergo periodic inspection by competent individuals to ensure its ongoing safety and integrity.</p>" +
+      "<p class='note'>It is imperative to note that this form does not imply acceptance of any site work performed by the contractor if it deviates from the building code or the contractual specifications outlined in the project documents.</p>" +
+      "<p class='note'>This document is not a replacement or substitute for “Form 2” or “Form 4”. It is strongly recommended that you apply for building approval from the applicable local authority/Municipality.</p>" +
+      "<div class='sign'><p>Yours faithfully,</p>" +
+      "<p><strong>" +
+      escapeHtml(eng.name) +
+      "</strong><br/>Pr. Eng.<br/>" +
+      escapeHtml(eng.contact) +
+      "</p></div>" +
+      "</body></html>"
+    );
+  }
+
+  function openScfPreview(project) {
+    const html = buildScfHtml(project);
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast("Popup blocked — allow popups to preview the SCF print view.", "error");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  }
+
   function openSettings() {
     const s = state.settings;
     const ds = state.data.settings || {};
     const statuses = getStatuses();
+    const eng = getEngineerDefaults();
     showOverlay(
       `<div class="panel wide" role="dialog" aria-label="Settings">` +
         `<h2>Settings <span class="version-badge" style="background:#eef2f7;color:var(--navy)">v${APP_VERSION}</span></h2>` +
@@ -1858,11 +2561,29 @@
         `<div class="form-group"><label>My name (for Dashboard “My work”)</label>` +
         `<input id="set-my-name" value="${escapeHtml(ds.myAssignee || "")}" placeholder="e.g. Alex Engineer" />` +
         `<p class="hint">Match the assignee string used on tasks.</p></div>` +
+        `<div class="settings-section"><h3>Structural Compliance (SCF)</h3>` +
+        `<div class="form-row">` +
+        `<div class="form-group"><label>SCF year</label><input id="set-scf-year" type="number" min="2000" max="2100" value="${escapeHtml(String(ds.scfYear || new Date().getFullYear()))}" /></div>` +
+        `<div class="form-group"><label>Next SCF sequence</label><input id="set-scf-seq" type="number" min="1" value="${escapeHtml(String(ds.scfSeq || 1))}" />` +
+        `<p class="hint">Next ref will be <code>LMX-SCF-YEAR-NNN</code> (never bare 008).</p></div>` +
+        `</div>` +
+        `<div class="form-row">` +
+        `<div class="form-group"><label>Engineer name</label><input id="set-eng-name" value="${escapeHtml(eng.name)}" /></div>` +
+        `<div class="form-group"><label>ECSA no</label><input id="set-eng-ecsa" value="${escapeHtml(eng.ecsaNo)}" /></div>` +
+        `</div>` +
+        `<div class="form-group"><label>Business name</label><input id="set-eng-biz" value="${escapeHtml(eng.business)}" /></div>` +
+        `<div class="form-group"><label>Business address</label><input id="set-eng-addr" value="${escapeHtml(eng.address)}" /></div>` +
+        `<div class="form-group"><label>Contact details</label><input id="set-eng-contact" value="${escapeHtml(eng.contact)}" /></div>` +
+        `<p class="hint">Editable defaults printed on SCF previews (fictional SAMPLE values ship in seed data).</p></div>` +
+        `<div class="settings-section"><h3>Project types (selectable + free text)</h3>` +
+        `<textarea id="set-project-types" rows="3" placeholder="One type per line">${escapeHtml(getProjectTypes().join("\n"))}</textarea></div>` +
+        `<div class="settings-section"><h3>Structure types</h3>` +
+        `<textarea id="set-structure-types" rows="3" placeholder="One type per line">${escapeHtml(getStructureTypes().join("\n"))}</textarea></div>` +
         `<div class="settings-section"><h3>Task statuses (board columns)</h3>` +
         `<div class="dyn-list" id="set-statuses"></div>` +
         `<button type="button" class="btn btn-secondary btn-sm" id="set-add-status" style="margin-top:0.4rem">+ Status</button>` +
         `<p class="hint">Category maps open/done semantics. Order = board column order.</p></div>` +
-        `<p class="sync-info">Task types are fixed: RDN, Design check, Drawing, Eng task (with type-specific fields). Data path: <code>${DATA_PATH}</code>.</p>` +
+        `<p class="sync-info">Task types are fixed: RDN, Design check, Drawing, Eng task. Default phases end with <strong>Done</strong>. Data path: <code>${DATA_PATH}</code>.</p>` +
         `<div class="panel-actions">` +
         `<button type="button" class="btn btn-secondary" id="set-cancel">Cancel</button>` +
         `<button type="button" class="btn" id="set-save">Save settings</button>` +
@@ -1931,6 +2652,29 @@
       });
       state.data.settings.taskStatuses = nextStatuses;
       state.data.settings.myAssignee = document.getElementById("set-my-name").value.trim();
+      const yr = Number(document.getElementById("set-scf-year").value);
+      const seq = Number(document.getElementById("set-scf-seq").value);
+      state.data.settings.scfYear = Number.isFinite(yr) && yr >= 2000 ? yr : new Date().getFullYear();
+      state.data.settings.scfSeq = Number.isFinite(seq) && seq >= 1 ? Math.floor(seq) : 1;
+      state.data.settings.engineerDefaults = {
+        name: document.getElementById("set-eng-name").value.trim() || DEFAULT_ENGINEER.name,
+        ecsaNo: document.getElementById("set-eng-ecsa").value.trim() || DEFAULT_ENGINEER.ecsaNo,
+        business: document.getElementById("set-eng-biz").value.trim() || DEFAULT_ENGINEER.business,
+        address: document.getElementById("set-eng-addr").value.trim() || DEFAULT_ENGINEER.address,
+        contact: document.getElementById("set-eng-contact").value.trim() || DEFAULT_ENGINEER.contact,
+      };
+      state.data.settings.projectTypes = document
+        .getElementById("set-project-types")
+        .value.split(/\n|,/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      state.data.settings.structureTypes = document
+        .getElementById("set-structure-types")
+        .value.split(/\n|,/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      if (!state.data.settings.projectTypes.length) state.data.settings.projectTypes = DEFAULT_PROJECT_TYPES.slice();
+      if (!state.data.settings.structureTypes.length) state.data.settings.structureTypes = DEFAULT_STRUCTURE_TYPES.slice();
       cacheDataLocally();
       closeOverlay();
       updateAuthBadge();
@@ -1949,6 +2693,16 @@
     const p = isEdit ? getProject(projectId) : null;
     const drawings = (p && p.drawingNumbers) || [];
     const customs = p && p.customFields ? Object.entries(p.customFields) : [];
+    const typeOpts = getProjectTypes();
+    const structOpts = getStructureTypes();
+    const selectedStructs = new Set((p && p.structureTypes) || []);
+    const typeList =
+      typeOpts
+        .map((t) => `<option value="${escapeHtml(t)}"></option>`)
+        .join("") +
+      (p && p.projectType && !typeOpts.includes(p.projectType)
+        ? `<option value="${escapeHtml(p.projectType)}"></option>`
+        : "");
 
     showOverlay(
       `<div class="panel wide" role="dialog">` +
@@ -1959,6 +2713,32 @@
         `</div>` +
         `<div class="form-group"><label>Project name</label><input id="pf-name" value="${escapeHtml(p ? p.projectName : "")}" /></div>` +
         `<div class="form-group"><label>Sales order number</label><input id="pf-so" value="${escapeHtml(p ? p.salesOrderNumber : "")}" /></div>` +
+        `<div class="form-row three">` +
+        `<div class="form-group"><label>PO number</label><input id="pf-po" value="${escapeHtml(p ? p.poNumber || "" : "")}" placeholder="PO-…" /></div>` +
+        `<div class="form-group"><label>POP reference</label><input id="pf-pop" value="${escapeHtml(p ? p.popReference || "" : "")}" placeholder="POP-…" /></div>` +
+        `<div class="form-group"><label>Invoice number</label><input id="pf-inv" value="${escapeHtml(p ? p.invoiceNumber || "" : "")}" placeholder="INV-…" /></div>` +
+        `</div>` +
+        `<div class="form-row">` +
+        `<div class="form-group"><label>Project type</label>` +
+        `<input id="pf-type" list="pf-type-list" value="${escapeHtml(p ? p.projectType || "" : "")}" placeholder="Select or type…" />` +
+        `<datalist id="pf-type-list">${typeList}</datalist>` +
+        `<p class="hint">Selectable list from Settings + free text.</p></div>` +
+        `<div class="form-group"><label>Address</label><input id="pf-address" value="${escapeHtml(p ? p.address || "" : "")}" placeholder="Site / project address" /></div>` +
+        `</div>` +
+        `<div class="form-group"><label>Contact person</label><input id="pf-contact" value="${escapeHtml(p ? p.contactPerson || "" : "")}" placeholder="Name · phone" /></div>` +
+        `<div class="form-group"><label>Structure types</label>` +
+        `<div class="chip-check-grid" id="pf-structures">` +
+        structOpts
+          .map((s) => {
+            const on = selectedStructs.has(s);
+            return (
+              `<label class="checkbox-label chip-check"><input type="checkbox" class="pf-struct" value="${escapeHtml(s)}"${on ? " checked" : ""}/> ${escapeHtml(s)}</label>`
+            );
+          })
+          .join("") +
+        `</div>` +
+        `<input id="pf-struct-extra" value="" placeholder="Add other structure type (comma-separated)" style="margin-top:0.4rem" />` +
+        `</div>` +
         `<div class="form-row">` +
         `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="pf-eng-signoff"${p && p.engineeringSignOff ? " checked" : ""}/> Engineering sign-off</label>` +
         `<p class="hint">Toggle when engineering has signed off this project.</p></div>` +
@@ -1969,12 +2749,17 @@
           return `<option value="${s.id}"${cur === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`;
         }).join("") +
         `</select>` +
-        `<p class="hint">“Has conformance” views include <strong>pending</strong> and <strong>approved</strong>.</p></div>` +
+        `<p class="hint">Issue via <strong>Issue conformance</strong> on the project (sets approved + LMX-SCF ref).</p></div>` +
         `</div>` +
         `<div class="form-row" id="pf-signoff-extra">` +
         `<div class="form-group"><label>Sign-off at</label><input type="date" id="pf-signoff-at" value="${escapeHtml(p && p.engineeringSignOffAt ? String(p.engineeringSignOffAt).slice(0, 10) : "")}" /></div>` +
         `<div class="form-group"><label>Sign-off by</label><input id="pf-signoff-by" value="${escapeHtml(p ? p.engineeringSignOffBy || "" : "")}" placeholder="Name" /></div>` +
         `</div>` +
+        (p && p.conformanceRef
+          ? `<p class="hint">Conformance ref: <strong>${escapeHtml(p.conformanceRef)}</strong>` +
+            (p.conformanceIssuedAt ? ` · issued ${escapeHtml(String(p.conformanceIssuedAt).slice(0, 10))}` : "") +
+            `</p>`
+          : "") +
         `<div class="form-group"><label>Drawing numbers</label>` +
         `<div class="dyn-list" id="pf-drawings"></div>` +
         `<button type="button" class="btn btn-secondary btn-sm" id="pf-add-drawing" style="margin-top:0.4rem">+ Drawing</button></div>` +
@@ -1982,7 +2767,7 @@
         `<div class="dyn-list" id="pf-customs"></div>` +
         `<button type="button" class="btn btn-secondary btn-sm" id="pf-add-custom" style="margin-top:0.4rem">+ Field</button></div>` +
         (!isEdit
-          ? `<p class="hint">New projects get default phases: Intake → Concept → Design → Check → Drawings → Site investigation → Site/Construction support → Close-out.</p>`
+          ? `<p class="hint">New projects get default phases ending in <strong>Done</strong> (terminal for SCF issue).</p>`
           : "") +
         `<div class="panel-actions">` +
         (isEdit ? `<button type="button" class="btn btn-danger" id="pf-delete" style="margin-right:auto">Delete</button>` : "") +
@@ -2059,10 +2844,46 @@
       let engineeringSignOffAt = document.getElementById("pf-signoff-at").value || null;
       let engineeringSignOffBy = document.getElementById("pf-signoff-by").value.trim();
       if (engineeringSignOff && !engineeringSignOffAt) engineeringSignOffAt = todayStr();
-      if (!engineeringSignOff) {
-        // Keep historical values but off flag is authoritative for views
-      }
       const conformanceStatus = normalizeConformanceStatus(document.getElementById("pf-conformance").value);
+      const poNumber = document.getElementById("pf-po").value.trim();
+      const popReference = document.getElementById("pf-pop").value.trim();
+      const invoiceNumber = document.getElementById("pf-inv").value.trim();
+      const address = document.getElementById("pf-address").value.trim();
+      const contactPerson = document.getElementById("pf-contact").value.trim();
+      const projectType = document.getElementById("pf-type").value.trim();
+      const structureTypes = [...document.querySelectorAll(".pf-struct:checked")].map((el) => el.value);
+      const extraStructs = document.getElementById("pf-struct-extra").value
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      extraStructs.forEach((s) => {
+        if (!structureTypes.includes(s)) structureTypes.push(s);
+      });
+      // Remember free-text project type in settings list
+      if (projectType) {
+        const pts = getProjectTypes();
+        if (!pts.includes(projectType)) {
+          state.data.settings.projectTypes = pts.concat([projectType]);
+        }
+      }
+      if (extraStructs.length) {
+        const sts = getStructureTypes();
+        const next = sts.slice();
+        extraStructs.forEach((s) => {
+          if (!next.includes(s)) next.push(s);
+        });
+        state.data.settings.structureTypes = next;
+      }
+
+      const commercial = {
+        poNumber,
+        popReference,
+        invoiceNumber,
+        address,
+        contactPerson,
+        projectType,
+        structureTypes,
+      };
 
       if (isEdit) {
         Object.assign(p, {
@@ -2076,6 +2897,7 @@
           engineeringSignOffAt,
           engineeringSignOffBy,
           conformanceStatus,
+          ...commercial,
           updatedAt: nowIso(),
         });
       } else {
@@ -2091,6 +2913,7 @@
           engineeringSignOffAt,
           engineeringSignOffBy,
           conformanceStatus,
+          ...commercial,
           phases: DEFAULT_PHASES.map((ph) => ({ id: uid("phase"), name: ph.name })),
           archived: false,
           createdAt: nowIso(),

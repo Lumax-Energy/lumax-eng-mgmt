@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "updatedAt": "2026-09-08T06:30:00.000Z",
+  "version": 2.1,
+  "updatedAt": "2026-09-08T07:30:00.000Z",
   "settings": {
     "taskStatuses": [
       {
@@ -40,15 +40,356 @@
         "category": "done"
       }
     ],
-    "myAssignee": ""
+    "myAssignee": "",
+    "projectTypes": [
+      "PV GM (SteelCore)",
+      "Rooftop ballast",
+      "SAT",
+      "Carport"
+    ],
+    "structureTypes": [
+      "PV GM (SteelCore)",
+      "Rooftop ballast",
+      "SAT tracker",
+      "Carport",
+      "Ground mount other"
+    ],
+    "engineerDefaults": {
+      "name": "Demo Pr. Eng. (SAMPLE)",
+      "ecsaNo": "ECSA-DEMO-00000",
+      "business": "Lumax ENERGY (PTY) Ltd \u2014 SAMPLE",
+      "address": "Demo Corporate Park North, Midrand 1685",
+      "contact": "+27(0) 00 000 0000 \u00b7 demo-eng@example.invalid"
+    },
+    "scfYear": 2026,
+    "scfSeq": 2
   },
   "projects": [
     {
+      "id": "proj-sample-ready-scf",
+      "clientName": "SAMPLE Client Alpha",
+      "projectName": "SAMPLE \u2014 Ready SCF Farm (Groblersdal fiction)",
+      "projectCode": "DEMO-SCF-READY",
+      "salesOrderNumber": "SO-DEMO-2001",
+      "poNumber": "PO-DEMO-7781",
+      "popReference": "POP-DEMO-441",
+      "invoiceNumber": "1002/70003244",
+      "address": "V8C7+HP Groblersdal (fictional) \u00b7 -25.128538, 29.314367",
+      "contactPerson": "Ben-Ernst Sample \u00b7 +27 76 000 0001",
+      "projectType": "PV GM (SteelCore)",
+      "structureTypes": [
+        "PV GM (SteelCore)"
+      ],
+      "drawingNumbers": [
+        "TZF-GM-001",
+        "TZF-GM-002"
+      ],
+      "customFields": {
+        "Note": "Fictional SAMPLE \u2014 ready to certify"
+      },
+      "phases": [
+        {
+          "id": "ready-phase-intake",
+          "name": "Intake"
+        },
+        {
+          "id": "ready-phase-concept",
+          "name": "Concept"
+        },
+        {
+          "id": "ready-phase-design",
+          "name": "Design"
+        },
+        {
+          "id": "ready-phase-check",
+          "name": "Check"
+        },
+        {
+          "id": "ready-phase-drawings",
+          "name": "Drawings"
+        },
+        {
+          "id": "ready-phase-site-investigation",
+          "name": "Site investigation"
+        },
+        {
+          "id": "ready-phase-site",
+          "name": "Site/Construction support"
+        },
+        {
+          "id": "ready-phase-closeout",
+          "name": "Close-out"
+        },
+        {
+          "id": "ready-phase-done",
+          "name": "Done"
+        }
+      ],
+      "engineeringSignOff": true,
+      "engineeringSignOffAt": "2026-09-01T10:00:00.000Z",
+      "engineeringSignOffBy": "Demo Engineer",
+      "conformanceStatus": "pending",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
+      "archived": false,
+      "createdAt": "2026-07-01T08:00:00.000Z",
+      "updatedAt": "2026-09-08T07:00:00.000Z"
+    },
+    {
+      "id": "proj-sample-missing-inv",
+      "clientName": "SAMPLE Client Beta",
+      "projectName": "SAMPLE \u2014 Missing INV Rooftop",
+      "projectCode": "DEMO-MISS-INV",
+      "salesOrderNumber": "SO-DEMO-2002",
+      "poNumber": "PO-DEMO-9001",
+      "popReference": "",
+      "invoiceNumber": "",
+      "address": "12 Fiction Road, Midrand (SAMPLE)",
+      "contactPerson": "Casey Contact \u00b7 +27 82 000 0002",
+      "projectType": "Rooftop ballast",
+      "structureTypes": [
+        "Rooftop ballast"
+      ],
+      "drawingNumbers": [
+        "DRW-RT-101"
+      ],
+      "customFields": {
+        "Note": "Fictional SAMPLE \u2014 missing invoice"
+      },
+      "phases": [
+        {
+          "id": "gap-phase-intake",
+          "name": "Intake"
+        },
+        {
+          "id": "gap-phase-concept",
+          "name": "Concept"
+        },
+        {
+          "id": "gap-phase-design",
+          "name": "Design"
+        },
+        {
+          "id": "gap-phase-check",
+          "name": "Check"
+        },
+        {
+          "id": "gap-phase-drawings",
+          "name": "Drawings"
+        },
+        {
+          "id": "gap-phase-site-investigation",
+          "name": "Site investigation"
+        },
+        {
+          "id": "gap-phase-site",
+          "name": "Site/Construction support"
+        },
+        {
+          "id": "gap-phase-closeout",
+          "name": "Close-out"
+        },
+        {
+          "id": "gap-phase-done",
+          "name": "Done"
+        }
+      ],
+      "engineeringSignOff": false,
+      "engineeringSignOffAt": null,
+      "engineeringSignOffBy": "",
+      "conformanceStatus": "none",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
+      "archived": false,
+      "createdAt": "2026-08-01T08:00:00.000Z",
+      "updatedAt": "2026-09-08T07:00:00.000Z"
+    },
+    {
+      "id": "proj-sample-mid-design",
+      "clientName": "SAMPLE Client Gamma",
+      "projectName": "SAMPLE \u2014 Mid-design SAT Array",
+      "projectCode": "DEMO-MID-SAT",
+      "salesOrderNumber": "SO-DEMO-2003",
+      "poNumber": "",
+      "popReference": "POP-DEMO-112",
+      "invoiceNumber": "INV-DEMO-555",
+      "address": "",
+      "contactPerson": "Riley Site \u00b7 +27 71 000 0003",
+      "projectType": "SAT",
+      "structureTypes": [
+        "SAT tracker"
+      ],
+      "drawingNumbers": [
+        "SAT-GA-01"
+      ],
+      "customFields": {
+        "Note": "Fictional SAMPLE \u2014 mid design / site investigation"
+      },
+      "phases": [
+        {
+          "id": "mid-phase-intake",
+          "name": "Intake"
+        },
+        {
+          "id": "mid-phase-concept",
+          "name": "Concept"
+        },
+        {
+          "id": "mid-phase-design",
+          "name": "Design"
+        },
+        {
+          "id": "mid-phase-check",
+          "name": "Check"
+        },
+        {
+          "id": "mid-phase-drawings",
+          "name": "Drawings"
+        },
+        {
+          "id": "mid-phase-site-investigation",
+          "name": "Site investigation"
+        },
+        {
+          "id": "mid-phase-site",
+          "name": "Site/Construction support"
+        },
+        {
+          "id": "mid-phase-closeout",
+          "name": "Close-out"
+        },
+        {
+          "id": "mid-phase-done",
+          "name": "Done"
+        }
+      ],
+      "engineeringSignOff": false,
+      "engineeringSignOffAt": null,
+      "engineeringSignOffBy": "",
+      "conformanceStatus": "none",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
+      "archived": false,
+      "createdAt": "2026-08-10T08:00:00.000Z",
+      "updatedAt": "2026-09-08T07:00:00.000Z"
+    },
+    {
+      "id": "proj-sample-archived-scf",
+      "clientName": "SAMPLE Client Delta",
+      "projectName": "SAMPLE \u2014 Archived Carport (issued)",
+      "projectCode": "DEMO-ARCH-001",
+      "salesOrderNumber": "SO-DEMO-1999",
+      "poNumber": "PO-ARCH-88",
+      "popReference": "POP-ARCH-9",
+      "invoiceNumber": "INV-ARCH-001",
+      "address": "Unit 9 Fiction Park, Centurion (SAMPLE)",
+      "contactPerson": "Morgan Owner \u00b7 +27 83 000 0004",
+      "projectType": "Carport",
+      "structureTypes": [
+        "Carport"
+      ],
+      "drawingNumbers": [
+        "CRP-001",
+        "CRP-002"
+      ],
+      "customFields": {
+        "Note": "Fictional SAMPLE \u2014 SCF already issued"
+      },
+      "phases": [
+        {
+          "id": "arch-phase-intake",
+          "name": "Intake"
+        },
+        {
+          "id": "arch-phase-concept",
+          "name": "Concept"
+        },
+        {
+          "id": "arch-phase-design",
+          "name": "Design"
+        },
+        {
+          "id": "arch-phase-check",
+          "name": "Check"
+        },
+        {
+          "id": "arch-phase-drawings",
+          "name": "Drawings"
+        },
+        {
+          "id": "arch-phase-site-investigation",
+          "name": "Site investigation"
+        },
+        {
+          "id": "arch-phase-site",
+          "name": "Site/Construction support"
+        },
+        {
+          "id": "arch-phase-closeout",
+          "name": "Close-out"
+        },
+        {
+          "id": "arch-phase-done",
+          "name": "Done"
+        }
+      ],
+      "engineeringSignOff": true,
+      "engineeringSignOffAt": "2026-08-15T10:00:00.000Z",
+      "engineeringSignOffBy": "Demo Engineer",
+      "conformanceStatus": "approved",
+      "conformanceRef": "LMX-SCF-2026-001",
+      "conformanceIssuedAt": "2026-08-20T09:00:00.000Z",
+      "conformanceCert": {
+        "ref": "LMX-SCF-2026-001",
+        "issuedAt": "2026-08-20T09:00:00.000Z",
+        "dateLabel": "20/08/2026",
+        "clientName": "SAMPLE Client Delta",
+        "projectName": "SAMPLE \u2014 Archived Carport (issued)",
+        "projectCode": "DEMO-ARCH-001",
+        "projectType": "Carport",
+        "structureTypes": [
+          "Carport"
+        ],
+        "address": "Unit 9 Fiction Park, Centurion (SAMPLE)",
+        "contactPerson": "Morgan Owner \u00b7 +27 83 000 0004",
+        "invoiceNumber": "INV-ARCH-001",
+        "poNumber": "PO-ARCH-88",
+        "popReference": "POP-ARCH-9",
+        "drawingNumbers": [
+          "CRP-001",
+          "CRP-002"
+        ],
+        "engineer": {
+          "name": "Demo Pr. Eng. (SAMPLE)",
+          "ecsaNo": "ECSA-DEMO-00000",
+          "business": "Lumax ENERGY (PTY) Ltd \u2014 SAMPLE",
+          "address": "Demo Corporate Park North, Midrand 1685",
+          "contact": "+27(0) 00 000 0000 \u00b7 demo-eng@example.invalid"
+        }
+      },
+      "archived": true,
+      "createdAt": "2026-05-01T08:00:00.000Z",
+      "updatedAt": "2026-08-20T09:00:00.000Z"
+    },
+    {
       "id": "proj-sample-demo-001",
       "clientName": "Demo",
-      "projectName": "SAMPLE — Demo Solar Array",
+      "projectName": "SAMPLE \u2014 Demo Solar Array",
       "projectCode": "DEMO-001",
       "salesOrderNumber": "SO-DEMO-1001",
+      "poNumber": "PO-DEMO-1001",
+      "popReference": "POP-DEMO-1001",
+      "invoiceNumber": "INV-DEMO-1001",
+      "address": "Fictional Industrial Park 201",
+      "contactPerson": "Alex Engineer \u00b7 +27 60 000 0005",
+      "projectType": "PV GM (SteelCore)",
+      "structureTypes": [
+        "PV GM (SteelCore)",
+        "Ground mount other"
+      ],
       "drawingNumbers": [
         "DRW-DEMO-001",
         "DRW-DEMO-002",
@@ -60,48 +401,199 @@
       },
       "phases": [
         {
-          "id": "phase-intake",
+          "id": "demo-phase-intake",
           "name": "Intake"
         },
         {
-          "id": "phase-concept",
+          "id": "demo-phase-concept",
           "name": "Concept"
         },
         {
-          "id": "phase-design",
+          "id": "demo-phase-design",
           "name": "Design"
         },
         {
-          "id": "phase-check",
+          "id": "demo-phase-check",
           "name": "Check"
         },
         {
-          "id": "phase-drawings",
+          "id": "demo-phase-drawings",
           "name": "Drawings"
         },
         {
-          "id": "phase-site-investigation",
+          "id": "demo-phase-site-investigation",
           "name": "Site investigation"
         },
         {
-          "id": "phase-site",
+          "id": "demo-phase-site",
           "name": "Site/Construction support"
         },
         {
-          "id": "phase-closeout",
+          "id": "demo-phase-closeout",
           "name": "Close-out"
+        },
+        {
+          "id": "demo-phase-done",
+          "name": "Done"
         }
       ],
-      "archived": false,
-      "createdAt": "2026-08-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T06:30:00.000Z",
       "engineeringSignOff": true,
       "engineeringSignOffAt": "2026-09-01T10:00:00.000Z",
       "engineeringSignOffBy": "Demo Engineer",
-      "conformanceStatus": "pending"
+      "conformanceStatus": "pending",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
+      "archived": false,
+      "createdAt": "2026-08-01T08:00:00.000Z",
+      "updatedAt": "2026-09-08T07:00:00.000Z"
     }
   ],
   "tasks": [
+    {
+      "id": "task-ready-1",
+      "projectId": "proj-sample-ready-scf",
+      "title": "SAMPLE final close-out pack",
+      "description": "Fictional pack for SCF-ready demo.",
+      "type": "eng_task",
+      "statusId": "status-done",
+      "assignee": "Demo Engineer",
+      "priority": "high",
+      "dueDate": "2026-09-01",
+      "phaseId": "ready-phase-closeout",
+      "discipline": "Structural",
+      "blockedReason": "",
+      "doneDate": "2026-09-01",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-08-01T08:00:00.000Z",
+      "updatedAt": "2026-09-01T10:00:00.000Z"
+    },
+    {
+      "id": "task-ready-2",
+      "projectId": "proj-sample-ready-scf",
+      "title": "SAMPLE Done-phase confirmation",
+      "description": "All work complete (fictional).",
+      "type": "eng_task",
+      "statusId": "status-done",
+      "assignee": "Jordan Eng",
+      "priority": "medium",
+      "dueDate": "2026-09-05",
+      "phaseId": "ready-phase-done",
+      "discipline": "QA",
+      "blockedReason": "",
+      "doneDate": "2026-09-05",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-09-01T08:00:00.000Z",
+      "updatedAt": "2026-09-05T10:00:00.000Z"
+    },
+    {
+      "id": "task-gap-1",
+      "projectId": "proj-sample-missing-inv",
+      "title": "SAMPLE rooftop ballast check",
+      "description": "Fictional design check.",
+      "type": "design_check",
+      "statusId": "status-doing",
+      "assignee": "Alex Engineer",
+      "priority": "high",
+      "dueDate": "2026-09-18",
+      "phaseId": "gap-phase-check",
+      "discipline": "",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "Jordan Eng",
+      "calcOrDrawingRef": "DRW-RT-101",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-08-05T08:00:00.000Z",
+      "updatedAt": "2026-09-07T10:00:00.000Z"
+    },
+    {
+      "id": "task-mid-1",
+      "projectId": "proj-sample-mid-design",
+      "title": "SAMPLE site investigation walkdown",
+      "description": "Fictional site investigation.",
+      "type": "eng_task",
+      "statusId": "status-todo",
+      "assignee": "Sam Drafter",
+      "priority": "medium",
+      "dueDate": "2026-09-25",
+      "phaseId": "mid-phase-site-investigation",
+      "discipline": "Civil",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-08-12T08:00:00.000Z",
+      "updatedAt": "2026-09-08T07:00:00.000Z"
+    },
+    {
+      "id": "task-mid-2",
+      "projectId": "proj-sample-mid-design",
+      "title": "SAMPLE tracker GA drawing",
+      "description": "Fictional drawing task.",
+      "type": "drawing",
+      "statusId": "status-doing",
+      "assignee": "Sam Drafter",
+      "priority": "high",
+      "dueDate": "2026-09-22",
+      "phaseId": "mid-phase-drawings",
+      "discipline": "",
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "SAT-GA-01",
+      "rev": "A",
+      "createdAt": "2026-08-15T08:00:00.000Z",
+      "updatedAt": "2026-09-08T07:00:00.000Z"
+    },
+    {
+      "id": "task-arch-1",
+      "projectId": "proj-sample-archived-scf",
+      "title": "SAMPLE issued SCF archive pack",
+      "description": "Fictional archived project task.",
+      "type": "eng_task",
+      "statusId": "status-done",
+      "assignee": "Demo Engineer",
+      "priority": "low",
+      "dueDate": "2026-08-18",
+      "phaseId": "arch-phase-done",
+      "discipline": "Structural",
+      "blockedReason": "",
+      "doneDate": "2026-08-18",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "createdAt": "2026-06-01T08:00:00.000Z",
+      "updatedAt": "2026-08-18T10:00:00.000Z"
+    },
     {
       "id": "task-1",
       "projectId": "proj-sample-demo-001",
@@ -112,7 +604,7 @@
       "assignee": "Alex Engineer",
       "priority": "high",
       "dueDate": "2026-08-15",
-      "phaseId": "phase-intake",
+      "phaseId": "demo-phase-intake",
       "discipline": "Geotech",
       "blockedReason": "",
       "doneDate": "2026-08-14",
@@ -136,7 +628,7 @@
       "assignee": "Sam Drafter",
       "priority": "high",
       "dueDate": "2026-09-20",
-      "phaseId": "phase-drawings",
+      "phaseId": "demo-phase-drawings",
       "drawingNumber": "DRW-DEMO-001",
       "rev": "A",
       "discipline": "",
@@ -160,7 +652,7 @@
       "assignee": "Jordan Eng",
       "priority": "medium",
       "dueDate": "2026-10-01",
-      "phaseId": "phase-design",
+      "phaseId": "demo-phase-design",
       "discipline": "Structural",
       "blockedReason": "",
       "doneDate": null,
@@ -175,41 +667,17 @@
       "updatedAt": "2026-09-07T20:54:23.000Z"
     },
     {
-      "id": "task-4",
+      "id": "task-6",
       "projectId": "proj-sample-demo-001",
-      "title": "Cable routing layout",
-      "description": "Route DC and AC cables on site plan.",
-      "type": "design_check",
-      "statusId": "status-backlog",
-      "assignee": "Alex Engineer",
-      "priority": "medium",
-      "dueDate": null,
-      "phaseId": "phase-design",
-      "checker": "Jordan Eng",
-      "calcOrDrawingRef": "DRW-DEMO-002",
-      "discipline": "",
-      "blockedReason": "",
-      "doneDate": null,
-      "refNumber": "",
-      "raisedBy": "",
-      "responseDue": null,
-      "drawingNumber": "",
-      "rev": "",
-      "createdAt": "2026-08-12T08:00:00.000Z",
-      "updatedAt": "2026-09-07T20:54:23.000Z"
-    },
-    {
-      "id": "task-5",
-      "projectId": "proj-sample-demo-001",
-      "title": "Pre-inspection checklist",
-      "description": "Compile inspection hold points for SAMPLE project.",
+      "title": "Site investigation walkdown",
+      "description": "Fictional SAMPLE site investigation checklist and photo log.",
       "type": "eng_task",
       "statusId": "status-todo",
-      "assignee": "Sam Drafter",
-      "priority": "low",
-      "dueDate": "2026-10-15",
-      "phaseId": "phase-site",
-      "discipline": "QA",
+      "assignee": "Demo Engineer",
+      "priority": "medium",
+      "dueDate": "2026-09-25",
+      "phaseId": "demo-phase-site-investigation",
+      "discipline": "Civil",
       "blockedReason": "",
       "doneDate": null,
       "refNumber": "",
@@ -219,13 +687,13 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
-      "createdAt": "2026-08-15T08:00:00.000Z",
-      "updatedAt": "2026-09-07T20:54:23.000Z"
+      "createdAt": "2026-09-01T08:00:00.000Z",
+      "updatedAt": "2026-09-08T06:30:00.000Z"
     },
     {
       "id": "task-standalone-rdn-1",
       "projectId": null,
-      "title": "SAMPLE RDN — Clarification on pile spacing",
+      "title": "SAMPLE RDN \u2014 Clarification on pile spacing",
       "description": "Fictional RDN for demo inbox / standalone workflow.",
       "type": "rdn",
       "statusId": "status-in-check",
@@ -245,30 +713,6 @@
       "discipline": "",
       "createdAt": "2026-09-01T08:00:00.000Z",
       "updatedAt": "2026-09-07T20:54:23.000Z"
-    },
-    {
-      "id": "task-6",
-      "projectId": "proj-sample-demo-001",
-      "title": "Site investigation walkdown",
-      "description": "Fictional SAMPLE site investigation checklist and photo log.",
-      "type": "eng_task",
-      "statusId": "status-todo",
-      "assignee": "Demo Engineer",
-      "priority": "medium",
-      "dueDate": "2026-09-25",
-      "phaseId": "phase-site-investigation",
-      "discipline": "Civil",
-      "blockedReason": "",
-      "doneDate": null,
-      "refNumber": "",
-      "raisedBy": "",
-      "responseDue": null,
-      "checker": "",
-      "calcOrDrawingRef": "",
-      "drawingNumber": "",
-      "rev": "",
-      "createdAt": "2026-09-01T08:00:00.000Z",
-      "updatedAt": "2026-09-08T06:30:00.000Z"
     }
   ]
 }

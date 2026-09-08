@@ -1,8 +1,8 @@
-# Lumax Energy — Engineering Management (v2)
+# Lumax Energy — Engineering Management (v2.1)
 
 Single-page static app for engineering project & task tracking. No build step. Works on **GitHub Pages** or any static host.
 
-**v2** adds: Dashboard · Projects · Tasks nav, configurable statuses, typed tasks (including standalone), richer default phases, and Excel export (SheetJS). GitHub Load/Save JSON sync is unchanged.
+**v2.1** builds on v2 with commercial project fields (PO / POP / INV / address / contact / project & structure types), a terminal **Done** phase, Structural Compliance Form (SCF) issue gate + printable certificate (`LMX-SCF-YYYY-NNN`), richer SAMPLE demos, and extra Dashboard views (SCF ready/issued, commercial gaps, by type). GitHub Load/Save SHA-safe behaviour (including conflict Load & retry) is unchanged.
 
 ## Go live (5 steps)
 
@@ -34,7 +34,7 @@ For host ranking and concrete Cloudflare / Render / Pages steps, see **[DEPLOY.m
 
 ### Default phases (new projects, editable per project)
 
-Intake · Concept · Design · Check · Drawings · Site/Construction support · Close-out
+Intake · Concept · Design · Check · Drawings · Site investigation · Site/Construction support · Close-out · **Done**
 
 ### Default task statuses (global, editable in Settings)
 
@@ -59,17 +59,29 @@ One-click **Export Excel** (SheetJS CDN) downloads a single workbook with sheets
 
 1. **Dashboard** — KPIs; open by status / type / assignee / client / project (always **full** dataset)
 2. **All Tasks** — flat task rows (**filter-scoped** when UI filters/search are active)
-3. **Projects** — code, name, client, SO, counts, at-risk (**full**)
-4. **By Assignee** — all tasks sorted by assignee (**full**)
-5. **By Client** — all tasks sorted by client (**full**)
-6. **By Project** — all tasks sorted by project (**full**)
-7. **RDN** — type split (**filter-scoped**)
-8. **Design Checks** — type split (**filter-scoped**)
-9. **Drawings** — type split (**filter-scoped**)
-10. **Eng Tasks** — type split (**filter-scoped**)
-11. **Summary** — type × status matrix + tallies (**full**)
+3. **Projects** — code, name, client, SO, **PO / POP / INV**, address, contact, type, conformance ref, counts (**full**)
+4. **SCF** — Structural Compliance Form rows (ref, INV, commercial fields, engineer defaults) (**full**)
+5. **By Assignee** — all tasks sorted by assignee (**full**)
+6. **By Client** — all tasks sorted by client (**full**)
+7. **By Project** — all tasks sorted by project (**full**)
+8. **RDN** — type split (**filter-scoped**)
+9. **Design Checks** — type split (**filter-scoped**)
+10. **Drawings** — type split (**filter-scoped**)
+11. **Eng Tasks** — type split (**filter-scoped**)
+12. **Summary** — type × status matrix + tallies (**full**)
 
 Every sheet freezes the header row and enables autofilter. Empty sheets are still included. A toast notes when export is filter-scoped. **Export JSON** remains for backup/sync.
+
+### SCF issue gate (v2.1)
+
+**Issue SCF** on a project is hard-disabled until:
+
+- `invoiceNumber` populated
+- `contactPerson` populated
+- `address` populated
+- current phase is **Done** (case-insensitive), with **Close-out** accepted as an alias
+
+Issuing allocates `LMX-SCF-YYYY-NNN` from Settings `scfYear` / `scfSeq` (year resets sequence), sets conformance to **approved**, and stores a certificate snapshot (client / project / type / address / contact / invoice / drawings + engineer block). Preview / print uses an HTML print-friendly Structural Compliance Form layout (not a bare `008` ref).
 
 ## Prefer Pages or a local static server
 
@@ -112,7 +124,7 @@ In the app: **Settings** → owner/repo + PAT. The PAT is stored **only in local
 
 ## Sample data
 
-`data/projects.json` ships with a clearly labeled **SAMPLE** project (fictional Demo client / DEMO-001) plus one standalone SAMPLE RDN. Safe to edit or delete after onboarding.
+`data/projects.json` ships with **≥4 fictional SAMPLE projects** (SCF-ready, missing INV, mid-design / site investigation, archived with `LMX-SCF-2026-001` issued) plus DEMO-001 and a standalone SAMPLE RDN. Safe to edit or delete after onboarding. Engineer defaults in Settings are fictional SAMPLE values.
 
 ## Security reminders
 

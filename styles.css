@@ -1,4 +1,4 @@
-/* Lumax Energy Engineering Management — v2 */
+/* Lumax Energy Engineering Management — v2.1 */
 :root {
   --navy: #0b1f3a;
   --navy-mid: #14325c;
@@ -406,6 +406,10 @@ a { color: var(--accent); }
 .browse-card-title { font-weight: 700; color: var(--navy); margin-bottom: 0.25rem; }
 .pill.signoff { background: #e5f6ed; color: #1a7f4b; }
 .pill.conformance { background: #efe8fb; color: #6c3483; }
+.pill.conformance.issued { background: #d9f2e5; color: #0f5c36; }
+.pill.scf-ready { background: #e3effc; color: #1a4f9c; }
+.pill.gap { background: #fff3cd; color: #856404; }
+
 #projects-view-chips { margin-bottom: 0.25rem; }
 
 .toast-action {
@@ -424,3 +428,68 @@ a { color: var(--accent); }
 .toast-action:hover { background: rgba(255,255,255,0.28); }
 .toast-action:disabled { opacity: 0.5; cursor: not-allowed; }
 .toast { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; }
+
+/* v2.1 — commercial / SCF */
+.form-row.three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+@media (max-width: 820px) {
+  .form-row.three { grid-template-columns: 1fr; }
+}
+.chip-check-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+}
+.chip-check {
+  background: #f4f6f8;
+  border: 1px solid var(--border, #d7dde5);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+}
+.scf-gate {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid #d9c7f0;
+  background: #faf6ff;
+  border-radius: 10px;
+}
+.scf-gate-title { margin-bottom: 0.35rem; color: var(--navy); }
+.scf-checklist {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+.scf-checklist li { font-size: 0.9rem; }
+.scf-checklist li.ok { color: #1a7f4b; }
+.scf-checklist li.missing { color: #9a3412; font-weight: 600; }
+button:disabled,
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.settings-section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border, #e3e8ef);
+}
+.settings-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--navy);
+}
+@media print {
+  .app-header,
+  .status-bar,
+  .no-print,
+  .detail-actions,
+  .phase-tabs,
+  .board,
+  .top-nav,
+  .header-actions { display: none !important; }
+}
