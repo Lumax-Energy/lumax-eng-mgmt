@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-09T11:47:00.605Z",
+  "updatedAt": "2026-09-09T12:18:28.046Z",
   "settings": {
     "taskStatuses": [
       {
@@ -103,7 +103,10 @@
       "Rooftop ballast",
       "Rooftop flush mount",
       "Custom",
-      "H-Max Double Access"
+      "H-Max Double Access",
+      "H-Max East-West",
+      "H-Max Standard",
+      "H-Max Reverse"
     ],
     "engineerDefaults": {
       "name": "Demo Pr. Eng. (SAMPLE)",
@@ -192,7 +195,7 @@
     {
       "id": "proj-y3ssrw0v0ki6",
       "clientName": "Bright Black Energy",
-      "projectName": "NMU - Missionvale",
+      "projectName": "NMU - Missionvale Campus",
       "projectCode": "BRI-CP-003",
       "salesOrderNumber": "QUO - 1002/011941/03 & QUO - 1002/011943/05",
       "poNumber": "",
@@ -264,7 +267,159 @@
       "activePhaseId": null,
       "archived": false,
       "createdAt": "2026-09-09T11:39:49.326Z",
-      "updatedAt": "2026-09-09T11:46:57.253Z"
+      "updatedAt": "2026-09-09T11:52:24.790Z"
+    },
+    {
+      "id": "proj-1ay9g8ikg6t4",
+      "clientName": "Bright Black Energy",
+      "projectName": "NMU - 2nd Avenue (Business School)",
+      "projectCode": "BRI-CP-003",
+      "salesOrderNumber": "QUO - 1002/013045/01",
+      "poNumber": "",
+      "popReference": "",
+      "invoiceNumber": "",
+      "address": "2nd Ave, Summerstrand, Gqeberha, 6001",
+      "contactPerson": "Riaan - +27 66 248 4032",
+      "projectType": "Carport",
+      "structureTypes": [
+        "H-Max Double Access"
+      ],
+      "drawingNumbers": [
+        "BRI-CP-ST-013 to BRI-CP-ST-014",
+        "BRI-CP-ST-011 to BRI-CP-ST-012"
+      ],
+      "customFields": {},
+      "phases": [
+        {
+          "id": "phase-fs0tr9esg6t4",
+          "name": "Intake"
+        },
+        {
+          "id": "phase-6bju4jx2g6t4",
+          "name": "Concept"
+        },
+        {
+          "id": "phase-ap3g5l8zg6t4",
+          "name": "Design"
+        },
+        {
+          "id": "phase-o6pp5oltg6t4",
+          "name": "Check"
+        },
+        {
+          "id": "phase-mioz5w75g6t4",
+          "name": "Drawings"
+        },
+        {
+          "id": "phase-wffcfyuug6t4",
+          "name": "Site investigation"
+        },
+        {
+          "id": "phase-jdbp29jhg6t4",
+          "name": "Site/Construction support"
+        },
+        {
+          "id": "phase-pafjyv12g6t4",
+          "name": "Close-out"
+        },
+        {
+          "id": "phase-z15chil7g6t4",
+          "name": "Done"
+        }
+      ],
+      "municipalSignOff": "pending",
+      "engineeringSignOff": false,
+      "engineeringSignOffAt": null,
+      "engineeringSignOffBy": "",
+      "conformanceStatus": "pending",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
+      "sclUndoSnapshot": null,
+      "sclHistory": [],
+      "activePhaseId": null,
+      "archived": false,
+      "createdAt": "2026-09-09T11:51:58.072Z",
+      "updatedAt": "2026-09-09T11:51:58.072Z"
+    },
+    {
+      "id": "proj-gtrzbps9k4xh",
+      "clientName": "Bright Black Energy",
+      "projectName": "NMU - South Campus",
+      "projectCode": "BRI-CP-005",
+      "salesOrderNumber": "QUO-1002/012090/03 & QUO-1002/011702/02 & QUO-1002/010771/03",
+      "poNumber": "",
+      "popReference": "",
+      "invoiceNumber": "",
+      "address": "University Way, Summerstrand, Gqeberha, 6019",
+      "contactPerson": "Riaan - +27 66 248 4032",
+      "projectType": "Carport",
+      "structureTypes": [
+        "H-Max Double Access",
+        "H-Max East-West",
+        "H-Max Standard"
+      ],
+      "drawingNumbers": [
+        "BRI-CP-ST-001 & BRI-CP-ST-002",
+        "BRI-CP-ST-003 & BRI-CP-ST-004",
+        "BRI-CP-ST-005 & BRI-CP-ST-006",
+        "BRI-CP-ST-007 & BRI-CP-ST-008",
+        "BRI-CP-ST-010 & BRI-CP-ST-011",
+        "BRI-CP-ST-012 & BRI-CP-ST-013"
+      ],
+      "customFields": {},
+      "phases": [
+        {
+          "id": "phase-9r9c5j28k4xh",
+          "name": "Intake"
+        },
+        {
+          "id": "phase-0sjiyjl6k4xh",
+          "name": "Concept"
+        },
+        {
+          "id": "phase-ag1nsqlrk4xh",
+          "name": "Design"
+        },
+        {
+          "id": "phase-7j1v6w4yk4xh",
+          "name": "Check"
+        },
+        {
+          "id": "phase-j5easei4k4xh",
+          "name": "Drawings"
+        },
+        {
+          "id": "phase-du4b3qrck4xh",
+          "name": "Site investigation"
+        },
+        {
+          "id": "phase-8c2s45erk4xh",
+          "name": "Site/Construction support"
+        },
+        {
+          "id": "phase-ww4i2ssfk4xh",
+          "name": "Close-out"
+        },
+        {
+          "id": "phase-b6pvxuckk4xh",
+          "name": "Done"
+        }
+      ],
+      "municipalSignOff": "pending",
+      "engineeringSignOff": false,
+      "engineeringSignOffAt": null,
+      "engineeringSignOffBy": "",
+      "conformanceStatus": "pending",
+      "conformanceRef": "",
+      "conformanceIssuedAt": null,
+      "conformanceCert": null,
+      "sclUndoSnapshot": null,
+      "sclHistory": [],
+      "activePhaseId": null,
+      "archived": false,
+      "createdAt": "2026-09-09T11:55:02.261Z",
+      "updatedAt": "2026-09-09T12:15:53.823Z"
     }
   ],
   "tasks": [
