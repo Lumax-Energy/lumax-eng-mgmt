@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-09T13:27:06.984Z",
+  "updatedAt": "2026-09-10T06:40:39.636Z",
   "settings": {
     "taskStatuses": [
       {
@@ -123,7 +123,7 @@
     {
       "id": "proj-f1onuhwdzk5w",
       "clientName": "Bright Black Energy",
-      "projectName": "Nelson Mandela University - George Campus",
+      "projectName": "NMU - George Campus",
       "projectCode": "BRI-CP-006",
       "salesOrderNumber": "QUO - 1002/013039/01",
       "poNumber": "",
@@ -190,7 +190,7 @@
       "activePhaseId": null,
       "archived": false,
       "createdAt": "2026-09-09T11:39:02.228Z",
-      "updatedAt": "2026-09-09T11:40:21.669Z"
+      "updatedAt": "2026-09-10T06:40:32.133Z"
     },
     {
       "id": "proj-y3ssrw0v0ki6",
@@ -470,6 +470,30 @@
       "discipline": "",
       "createdAt": "2026-09-09T11:31:30.661Z",
       "updatedAt": "2026-09-09T11:31:30.661Z"
+    },
+    {
+      "id": "task-cqlk0uivr03v",
+      "projectId": null,
+      "title": "Easy Power Solar - NuHarvest",
+      "description": "Create a POT Report using Pile test results.",
+      "type": "report_writing",
+      "statusId": "status-in-check",
+      "assignee": "Lucian",
+      "priority": "high",
+      "dueDate": "2026-09-10",
+      "phaseId": null,
+      "blockedReason": "",
+      "doneDate": "2026-09-10",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Geotechnical",
+      "createdAt": "2026-09-10T06:40:07.243Z",
+      "updatedAt": "2026-09-10T06:40:07.243Z"
     }
   ]
 }
