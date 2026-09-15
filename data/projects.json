@@ -1,6 +1,6 @@
 {
   "version": 2.3,
-  "updatedAt": "2026-09-10T06:40:39.636Z",
+  "updatedAt": "2026-09-15T07:48:06.265Z",
   "settings": {
     "taskStatuses": [
       {
@@ -428,14 +428,14 @@
       "projectId": null,
       "title": "AECI Modderfontein",
       "description": "Energy Partners Power - Yaima didn't write a report",
-      "type": "report_writing",
-      "statusId": "status-doing",
+      "type": "eng_task",
+      "statusId": "status-done",
       "assignee": "Lucian",
       "priority": "high",
       "dueDate": "2026-09-10",
       "phaseId": null,
       "blockedReason": "",
-      "doneDate": null,
+      "doneDate": "2026-09-15",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -445,7 +445,7 @@
       "rev": "",
       "discipline": "Structural",
       "createdAt": "2026-09-09T11:14:22.485Z",
-      "updatedAt": "2026-09-09T11:14:30.845Z"
+      "updatedAt": "2026-09-15T06:15:25.632Z"
     },
     {
       "id": "task-9isab07apvqd",
@@ -476,7 +476,7 @@
       "projectId": null,
       "title": "Easy Power Solar - NuHarvest",
       "description": "Create a POT Report using Pile test results.",
-      "type": "report_writing",
+      "type": "eng_task",
       "statusId": "status-in-check",
       "assignee": "Lucian",
       "priority": "high",
@@ -494,6 +494,54 @@
       "discipline": "Geotechnical",
       "createdAt": "2026-09-10T06:40:07.243Z",
       "updatedAt": "2026-09-10T06:40:07.243Z"
+    },
+    {
+      "id": "task-vjvi931m99yh",
+      "projectId": null,
+      "title": "Check 4V E-W GM without middle pile",
+      "description": "",
+      "type": "eng_task",
+      "statusId": "status-doing",
+      "assignee": "Lucian",
+      "priority": "high",
+      "dueDate": "2026-09-16",
+      "phaseId": null,
+      "blockedReason": "",
+      "doneDate": "2026-09-16",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Structural",
+      "createdAt": "2026-09-14T13:04:55.721Z",
+      "updatedAt": "2026-09-14T17:46:55.725Z"
+    },
+    {
+      "id": "task-41ny36j4dmf0",
+      "projectId": null,
+      "title": "AI Tool (SANS10160-3)",
+      "description": "",
+      "type": "eng_task",
+      "statusId": "status-done",
+      "assignee": "Lucian",
+      "priority": "medium",
+      "dueDate": "2026-09-15",
+      "phaseId": null,
+      "blockedReason": "",
+      "doneDate": "2026-09-15",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Structural",
+      "createdAt": "2026-09-15T07:48:03.132Z",
+      "updatedAt": "2026-09-15T07:48:03.132Z"
     }
   ]
 }
