@@ -1,6 +1,8 @@
-# Lumax Energy — Engineering Management (v2.3)
+# Lumax Energy — Engineering Management (v2.4)
 
 Single-page static app for engineering project & task tracking. No build step. Works on **GitHub Pages** or any static host.
+
+**v2.4** Mark as Done (status → Done + completed date = click day, Africa/Johannesburg) · SC Letter **SO No.** under Invoice No. · SC Letter **Structural Design** / **Foundation Design** blocks (Designed + Checked).
 
 **v2.3** Executive / SCL pass: Researchy **6 KPI** traffic-light dashboard (Open projects · Overdue work · Ready for SC letter · SC letters issued · Commercial gaps · Municipal sign-off pending), Excel Dashboard sheet `KPI | Value | Light | Note`, **Structural Conformance Letter** label, structure-type defaults (Carport H-Max … Custom), editable task + project types in Settings, `municipalSignOff` (`pending` | `approved` | `n/a`), **Undo Create SC Letter** (restore snapshot; decrement seq only if last issued, else void). Preserves GitHub Load/Save SHA-safe sync, Create SC Letter gate, phase DnD, null-safe `wire()`, Excel navy polish.
 
@@ -37,6 +39,8 @@ Intake · Concept · Design · Check · Drawings · Site investigation · Site/C
 
 Drag task cards onto **phase tabs** to change `phaseId`, or onto status columns to change status.
 
+**Mark as Done** on a task card, task list row, or task editor sets status to **Done** and writes **completed date** (`doneDate`) to today in `Africa/Johannesburg`. Clicking again refreshes the completed date to today.
+
 ### Commercial / SCL project fields
 
 | Field | Notes |
@@ -44,6 +48,9 @@ Drag task cards onto **phase tabs** to change `phaseId`, or onto status columns 
 | `poNumber` | Purchase order |
 | `popReference` | POP reference |
 | `invoiceNumber` | INV — required to create SC Letter |
+| `salesOrderNumber` | SO No. — shown on the SC Letter under Invoice No. |
+| `structuralDesign` | `{ designed, checked }` — SC Letter block under Project Details |
+| `foundationDesign` | `{ designed, checked }` — SC Letter block under Project Details |
 | `address` | Site / project address — required |
 | `contactPerson` | Required |
 | `projectType` | Selectable list (Settings) + free text |

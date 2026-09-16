@@ -89,6 +89,49 @@ a { color: var(--accent); }
 .btn-secondary:hover { background: #eef2f7; }
 .btn-danger { background: var(--danger); }
 .btn-danger:hover { background: #a93226; }
+.btn-done { background: var(--success); color: #fff; }
+.btn-done:hover { background: #14663c; }
+.task-card .btn-mark-done {
+  margin-top: 0.5rem;
+  width: 100%;
+  justify-content: center;
+}
+.task-done-cell { width: 1%; white-space: nowrap; }
+.scl-design-blocks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 0.85rem 0 1rem;
+}
+.scl-design-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 0.85rem;
+  background: #f7f9fc;
+}
+.scl-design-block h4 {
+  font-size: 0.9rem;
+  color: var(--navy);
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+}
+.scl-design-block .checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+.scf-design-blocks {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+.scf-design-blocks td, .scf-design-blocks th {
+  border: 1px solid #333;
+  padding: 0.4rem 0.55rem;
+}
+@media (max-width: 700px) {
+  .scl-design-blocks { grid-template-columns: 1fr; }
+}
 .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.85rem; }
 .main { max-width: 1280px; margin: 0 auto; padding: 1.25rem; }
 .view.hidden { display: none !important; }

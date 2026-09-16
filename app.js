@@ -1,9 +1,11 @@
 /**
- * Lumax Energy — Engineering Management v2.3
+ * Lumax Energy — Engineering Management v2.4
  * Vanilla JS SPA: Dashboard · Projects · Tasks + Structural Conformance Letter + exec KPIs + GitHub sync + Excel.
  */
 (function () {
   "use strict";
+  if (window.__LUMAX_ENG_MGMT_BOOTED) return;
+  window.__LUMAX_ENG_MGMT_BOOTED = true;
 
   const LS_DATA = "lumax-eng-mgmt-data";
   const LS_SETTINGS = "lumax-eng-mgmt-settings";
@@ -11,7 +13,7 @@
   const DEFAULT_OWNER = "Lumax-Energy";
   const DEFAULT_REPO = "lumax-eng-mgmt";
   const DATA_PATH = "data/projects.json";
-  const APP_VERSION = 2.3;
+  const APP_VERSION = 2.4;
 
   const DEFAULT_PHASES = [
     { id: "phase-intake", name: "Intake" },
@@ -222,7 +224,20 @@
     return new Date().toISOString();
   }
   function todayStr() {
-    return new Date().toISOString().slice(0, 10);
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Johannesburg",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch (_) {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return y + "-" + m + "-" + day;
+    }
   }
   function escapeHtml(s) {
     return String(s == null ? "" : s)
@@ -327,6 +342,73 @@
   function statusIsDone(statusId) {
     const s = getStatus(statusId);
     return s && s.category === "done";
+  }
+  function normalizeDesignScope(v) {
+    const o = v && typeof v === "object" ? v : {};
+    return { designed: !!o.designed, checked: !!o.checked };
+  }
+  function designTick(on) {
+    return on ? "☑" : "☐";
+  }
+  function doneStatusId() {
+    const done = getStatuses().find((s) => s.category === "done") || getStatus("status-done");
+    return (done && done.id) || "status-done";
+  }
+  function markTaskDone(task) {
+    if (!task) return false;
+    task.statusId = doneStatusId();
+    task.doneDate = todayStr();
+    task.updatedAt = nowIso();
+    if (task.projectId) {
+      const proj = getProject(task.projectId);
+      if (proj) proj.updatedAt = nowIso();
+    }
+    cacheDataLocally();
+    toast(localSaveHint("Marked done · completed " + task.doneDate), "success");
+    return true;
+  }
+  function markDoneButtonHtml(task) {
+    if (!task) return "";
+    const done = statusIsDone(task.statusId);
+    const label = done ? "Set completed today" : "Mark as Done";
+    return (
+      `<button type="button" class="btn btn-done btn-sm btn-mark-done" data-mark-done="${escapeHtml(task.id)}" title="Set status to Done and completed date to today">${escapeHtml(label)}</button>`
+    );
+  }
+  function bindMarkDoneButtons(root) {
+    if (!root) return;
+    root.querySelectorAll(".btn-mark-done").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const t = getTask(btn.dataset.markDone);
+        if (!t) return;
+        markTaskDone(t);
+        closeOverlay();
+        render();
+      });
+    });
+  }
+  function sclDesignBlocksHtml(structural, foundation) {
+    const sd = normalizeDesignScope(structural);
+    const fd = normalizeDesignScope(foundation);
+    function row(title, scope) {
+      return (
+        "<tr><td class='lbl'>" +
+        escapeHtml(title) +
+        "</td><td>" +
+        designTick(scope.designed) +
+        " Designed</td><td>" +
+        designTick(scope.checked) +
+        " Checked</td></tr>"
+      );
+    }
+    return (
+      "<table class='scf-design-blocks'><tbody>" +
+      row("Structural Design", sd) +
+      row("Foundation Design", fd) +
+      "</tbody></table>"
+    );
   }
   function statusIsBlocked(statusId) {
     const s = getStatus(statusId);
@@ -707,9 +789,12 @@
         address: (project && project.address) || "",
         contactPerson: (project && project.contactPerson) || "",
         invoiceNumber: (project && project.invoiceNumber) || "",
+        salesOrderNumber: (project && project.salesOrderNumber) || "",
         poNumber: (project && project.poNumber) || "",
         popReference: (project && project.popReference) || "",
         drawingNumbers: ((project && project.drawingNumbers) || []).slice(),
+        structuralDesign: normalizeDesignScope(project && project.structuralDesign),
+        foundationDesign: normalizeDesignScope(project && project.foundationDesign),
         engineer: {
           name: e.name || "",
           ecsaNo: e.ecsaNo || "",
@@ -735,12 +820,15 @@
         `<div class="scf-grid">` +
         `<section><h2>Project Details</h2>` +
         `<table class="scf-table"><tbody>` +
-        `<tr><th>Client Name</th><td>${escapeHtml(s.clientName || "—")}</td><th>Invoice No.</th><td>${escapeHtml(s.invoiceNumber || "—")}</td></tr>` +
+        `<tr><th rowspan="2">Client Name</th><td rowspan="2">${escapeHtml(s.clientName || "—")}</td><th>Invoice No.</th><td>${escapeHtml(s.invoiceNumber || "—")}</td></tr>` +
+        `<tr><th>SO No.</th><td>${escapeHtml(s.salesOrderNumber || "—")}</td></tr>` +
         `<tr><th>Project Name</th><td>${escapeHtml(s.projectName || "—")}</td><th>Drawing No.</th><td>${escapeHtml(drawings)}</td></tr>` +
         `<tr><th>Project Type</th><td colspan="3">${escapeHtml(pType)}</td></tr>` +
         `<tr><th>Address</th><td colspan="3">${escapeHtml(s.address || "—")}</td></tr>` +
         `<tr><th>Contact Person</th><td colspan="3">${escapeHtml(s.contactPerson || "—")}</td></tr>` +
-        `</tbody></table></section>` +
+        `</tbody></table>` +
+        sclDesignBlocksHtml(s.structuralDesign, s.foundationDesign) +
+        `</section>` +
         `<section><h2>Practising Engineer Details</h2>` +
         `<table class="scf-table"><tbody>` +
         `<tr><th>Pr. Engineer</th><td>${escapeHtml(eng.name || "—")}</td></tr>` +
@@ -1077,6 +1165,8 @@
       structureTypes: structureTypesUnique,
       drawingNumbers: Array.isArray(p.drawingNumbers) ? p.drawingNumbers.slice() : [],
       customFields: p.customFields && typeof p.customFields === "object" ? { ...p.customFields } : {},
+      structuralDesign: normalizeDesignScope(p.structuralDesign),
+      foundationDesign: normalizeDesignScope(p.foundationDesign),
       phases,
       municipalSignOff,
       engineeringSignOff,
@@ -2652,10 +2742,13 @@
               (t.assignee ? `<span>${escapeHtml(t.assignee)}</span>` : "") +
               (t.dueDate ? `<span>Due ${escapeHtml(t.dueDate)}</span>` : "") +
               (t.priority ? `<span class="priority ${escapeHtml(t.priority)}">${escapeHtml(t.priority)}</span>` : "") +
+              (t.doneDate ? `<span>Completed ${escapeHtml(t.doneDate)}</span>` : "") +
               (phase && state.selectedPhaseId === "all" ? `<span>${escapeHtml(phase.name)}</span>` : "") +
               (!projectCtx && proj ? `<span>${escapeHtml(proj.projectCode || proj.projectName)}</span>` : "") +
               (!projectCtx && !proj ? `<span>Standalone</span>` : "") +
-              `</div></div>`
+              `</div>` +
+              markDoneButtonHtml(t) +
+              `</div>`
             );
           })
           .join("");
@@ -2683,6 +2776,7 @@
       });
       card.addEventListener("dragend", () => card.classList.remove("dragging"));
     });
+    bindMarkDoneButtons(container);
     container.querySelectorAll(".status-drop").forEach((col) => {
       col.addEventListener("dragover", (e) => {
         e.preventDefault();
@@ -2697,7 +2791,7 @@
         const statusId = col.dataset.status;
         if (!t || !statusId || t.statusId === statusId) return;
         t.statusId = statusId;
-        if (statusIsDone(statusId) && !t.doneDate) t.doneDate = todayStr();
+        if (statusIsDone(statusId)) t.doneDate = todayStr();
         t.updatedAt = nowIso();
         cacheDataLocally();
         toast(localSaveHint("Moved to " + ((getStatus(statusId) || {}).name || statusId)), "success");
@@ -2770,7 +2864,7 @@
     } else {
       body =
         `<div class="tasks-table-wrap"><table class="tasks-table"><thead><tr>` +
-        `<th>Type</th><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Priority</th><th>Due</th>` +
+        `<th>Type</th><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Priority</th><th>Due</th><th>Completed</th><th></th>` +
         `</tr></thead><tbody>` +
         (tasks.length
           ? tasks
@@ -2786,11 +2880,13 @@
                   `<td>${escapeHtml(t.assignee || "—")}</td>` +
                   `<td><span class="priority ${escapeHtml(t.priority)}">${escapeHtml(t.priority)}</span></td>` +
                   `<td>${escapeHtml(t.dueDate || "—")}</td>` +
+                  `<td>${escapeHtml(t.doneDate || "—")}</td>` +
+                  `<td class="task-done-cell">${markDoneButtonHtml(t)}</td>` +
                   `</tr>`
                 );
               })
               .join("")
-          : `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1.5rem">No tasks match filters</td></tr>`) +
+          : `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:1.5rem">No tasks match filters</td></tr>`) +
         `</tbody></table></div>`;
     }
 
@@ -2802,6 +2898,7 @@
       root.querySelectorAll("tbody tr[data-task]").forEach((row) => {
         row.addEventListener("click", () => openTaskForm(row.dataset.task));
       });
+      bindMarkDoneButtons(root);
     }
 
     function syncFilters() {
@@ -2879,8 +2976,14 @@
     const shade = opts.shade ? '<w:shd w:val="clear" w:fill="' + opts.shade + '"/>' : '';
     const bold = opts.bold ? '<w:b/>' : '';
     const span = opts.span && opts.span > 1 ? '<w:gridSpan w:val="' + opts.span + '"/>' : '';
+    const vMerge =
+      opts.vMerge === "restart"
+        ? '<w:vMerge w:val="restart"/>'
+        : opts.vMerge === "continue"
+          ? '<w:vMerge/>'
+          : "";
     return (
-      '<w:tc><w:tcPr><w:tcW w:w="' + width + '" w:type="dxa"/>' + span + shade +
+      '<w:tc><w:tcPr><w:tcW w:w="' + width + '" w:type="dxa"/>' + span + vMerge + shade +
       '<w:tcBorders>' +
       '<w:top w:val="single" w:sz="4" w:color="000000"/>' +
       '<w:left w:val="single" w:sz="4" w:color="000000"/>' +
@@ -2915,9 +3018,11 @@
     const clientName = (snap && snap.clientName) || project.clientName || "—";
     const projectName = (snap && snap.projectName) || project.projectName || "—";
     const invoiceNumber = (snap && snap.invoiceNumber) || project.invoiceNumber || "—";
+    const soNumber = (snap && snap.salesOrderNumber) || project.salesOrderNumber || "—";
     const address = (snap && snap.address) || project.address || "—";
     const contactPerson = (snap && snap.contactPerson) || project.contactPerson || "—";
-    // Generic SAMPLE wording — engineerDefaults fictional only (do not invent real Pr Eng credentials)
+    const sd = normalizeDesignScope((snap && snap.structuralDesign) || project.structuralDesign);
+    const fd = normalizeDesignScope((snap && snap.foundationDesign) || project.foundationDesign);
     const intro =
       "As a practising Structural Engineer and registered as a Professional Engineer Technologist under the provisions of the Engineering Profession Act, 2000 (Act No. 46 of 2000), I hereby certify that the Photovoltaic Mounting system (" +
       pType +
@@ -2944,10 +3049,16 @@
       "</w:tblPr>" +
       '<w:tblGrid><w:gridCol w:w="1696"/><w:gridCol w:w="4111"/><w:gridCol w:w="1418"/><w:gridCol w:w="3231"/></w:tblGrid>' +
       wRow([
-        wTc("Client Name", { bold: true, shade: "F4F6F8", width: 1696 }),
-        wTc(clientName, { width: 4111 }),
+        wTc("Client Name", { bold: true, shade: "F4F6F8", width: 1696, vMerge: "restart" }),
+        wTc(clientName, { width: 4111, vMerge: "restart" }),
         wTc("Invoice No.", { bold: true, shade: "F4F6F8", width: 1418 }),
         wTc(invoiceNumber, { width: 3231 }),
+      ]) +
+      wRow([
+        wTc("Client Name", { bold: true, shade: "F4F6F8", width: 1696, vMerge: "continue" }),
+        wTc(clientName, { width: 4111, vMerge: "continue" }),
+        wTc("SO No.", { bold: true, shade: "F4F6F8", width: 1418 }),
+        wTc(soNumber, { width: 3231 }),
       ]) +
       wRow([
         wTc("Project Name", { bold: true, shade: "F4F6F8", width: 1696 }),
@@ -2968,6 +3079,22 @@
         wTc(contactPerson, { width: 8760, span: 3 }),
       ]) +
       "</w:tbl>";
+    const designTbl =
+      '<w:tbl><w:tblPr><w:tblW w:w="10456" w:type="dxa"/><w:tblLayout w:type="fixed"/>' +
+      tblBorders +
+      "</w:tblPr>" +
+      '<w:tblGrid><w:gridCol w:w="5228"/><w:gridCol w:w="2614"/><w:gridCol w:w="2614"/></w:tblGrid>' +
+      wRow([
+        wTc("Structural Design", { bold: true, shade: "F4F6F8", width: 5228 }),
+        wTc(designTick(sd.designed) + " Designed", { width: 2614 }),
+        wTc(designTick(sd.checked) + " Checked", { width: 2614 }),
+      ]) +
+      wRow([
+        wTc("Foundation Design", { bold: true, shade: "F4F6F8", width: 5228 }),
+        wTc(designTick(fd.designed) + " Designed", { width: 2614 }),
+        wTc(designTick(fd.checked) + " Checked", { width: 2614 }),
+      ]) +
+      "</w:tbl>";
     const engTbl =
       '<w:tbl><w:tblPr><w:tblW w:w="10456" w:type="dxa"/><w:tblLayout w:type="fixed"/>' +
       tblBorders +
@@ -2985,6 +3112,8 @@
       wPara(intro, { sz: 20, justify: true, after: 200 }) +
       wPara("Project Details", { bold: true, sz: 22, after: 80 }) +
       projTbl +
+      wEmpty() +
+      designTbl +
       wEmpty() +
       wPara("Practising Engineer Details", { bold: true, sz: 22, after: 80 }) +
       engTbl +
@@ -3220,10 +3349,13 @@
     const clientName = (snap && snap.clientName) || project.clientName || "—";
     const projectName = (snap && snap.projectName) || project.projectName || "—";
     const invoiceNumber = (snap && snap.invoiceNumber) || project.invoiceNumber || "—";
+    const soNumber = (snap && snap.salesOrderNumber) || project.salesOrderNumber || "—";
     const address = (snap && snap.address) || project.address || "—";
     const contactPerson = (snap && snap.contactPerson) || project.contactPerson || "—";
     const poNumber = (snap && snap.poNumber) || project.poNumber || "";
     const popReference = (snap && snap.popReference) || project.popReference || "";
+    const sd = normalizeDesignScope((snap && snap.structuralDesign) || (project && project.structuralDesign));
+    const fd = normalizeDesignScope((snap && snap.foundationDesign) || (project && project.foundationDesign));
     return (
       "<!DOCTYPE html><html><head><meta charset='utf-8'/>" +
       "<title>" +
@@ -3255,10 +3387,13 @@
       " analysed complies with the National Building Regulations, SANS 10400-Part B — Structural Design Building Regulations.</p>" +
       "<h1>Project Details</h1>" +
       "<table>" +
-      "<tr><td class='lbl'>Client Name</td><td>" +
+      "<tr><td class='lbl' rowspan='2'>Client Name</td><td rowspan='2'>" +
       escapeHtml(clientName) +
       "</td><td class='lbl'>Invoice No.</td><td>" +
       escapeHtml(invoiceNumber) +
+      "</td></tr>" +
+      "<tr><td class='lbl'>SO No.</td><td>" +
+      escapeHtml(soNumber) +
       "</td></tr>" +
       "<tr><td class='lbl'>Project Name</td><td>" +
       escapeHtml(projectName) +
@@ -3278,6 +3413,7 @@
       escapeHtml([poNumber, popReference].filter(Boolean).join(" · ") || "—") +
       "</td></tr>" +
       "</table>" +
+      sclDesignBlocksHtml(sd, fd) +
       "<h1>Practising Engineer Details</h1>" +
       "<table>" +
       "<tr><td class='lbl'>Pr. Engineer</td><td>" +
@@ -3568,6 +3704,15 @@
         `<div class="form-group"><label>Address</label><input id="pf-address" value="${escapeHtml(p ? p.address || "" : "")}" placeholder="Site / project address" /></div>` +
         `</div>` +
         `<div class="form-group"><label>Contact person</label><input id="pf-contact" value="${escapeHtml(p ? p.contactPerson || "" : "")}" placeholder="Name · phone" /></div>` +
+        `<div class="scl-design-blocks">` +
+        `<div class="scl-design-block"><h4>Structural Design</h4><div class="checks">` +
+        `<label class="checkbox-label"><input type="checkbox" id="pf-sd-designed"${p && p.structuralDesign && p.structuralDesign.designed ? " checked" : ""}/> Designed</label>` +
+        `<label class="checkbox-label"><input type="checkbox" id="pf-sd-checked"${p && p.structuralDesign && p.structuralDesign.checked ? " checked" : ""}/> Checked</label>` +
+        `</div></div>` +
+        `<div class="scl-design-block"><h4>Foundation Design</h4><div class="checks">` +
+        `<label class="checkbox-label"><input type="checkbox" id="pf-fd-designed"${p && p.foundationDesign && p.foundationDesign.designed ? " checked" : ""}/> Designed</label>` +
+        `<label class="checkbox-label"><input type="checkbox" id="pf-fd-checked"${p && p.foundationDesign && p.foundationDesign.checked ? " checked" : ""}/> Checked</label>` +
+        `</div></div></div>` +
         `<div class="form-group"><label>Structure types</label>` +
         `<div class="chip-check-grid" id="pf-structures">` +
         structOpts
@@ -3737,6 +3882,14 @@
         contactPerson,
         projectType,
         structureTypes,
+        structuralDesign: normalizeDesignScope({
+          designed: !!(document.getElementById("pf-sd-designed") && document.getElementById("pf-sd-designed").checked),
+          checked: !!(document.getElementById("pf-sd-checked") && document.getElementById("pf-sd-checked").checked),
+        }),
+        foundationDesign: normalizeDesignScope({
+          designed: !!(document.getElementById("pf-fd-designed") && document.getElementById("pf-fd-designed").checked),
+          checked: !!(document.getElementById("pf-fd-checked") && document.getElementById("pf-fd-checked").checked),
+        }),
       };
 
       if (isEdit) {
@@ -3903,6 +4056,9 @@
         `</div>` +
         `<div class="form-group" id="tf-blocked-wrap"><label>Blocked reason</label><input id="tf-blocked" value="${escapeHtml(t ? t.blockedReason : "")}" /></div>` +
         `<div class="form-group"><label>Done date</label><input type="date" id="tf-done" value="${escapeHtml(t && t.doneDate ? t.doneDate : "")}" /></div>` +
+        (isEdit
+          ? `<div class="form-group">${markDoneButtonHtml(t)}<p class="hint">Sets status to Done and completed date to today (Africa/Johannesburg).</p></div>`
+          : "") +
         `<div class="panel-actions">` +
         (isEdit ? `<button type="button" class="btn btn-danger" id="tf-delete" style="margin-right:auto">Delete</button>` : "") +
         `<button type="button" class="btn btn-secondary" id="tf-cancel">Cancel</button>` +
@@ -3954,6 +4110,7 @@
     refreshPhases();
 
     document.getElementById("tf-cancel").onclick = closeOverlay;
+    bindMarkDoneButtons(document.getElementById("overlay"));
     if (isEdit) {
       document.getElementById("tf-delete").onclick = () => {
         if (!confirm("Delete this task?")) return;
@@ -4080,8 +4237,20 @@
     });
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
+  function startApp() {
     wire();
+    if (window.__LUMAX_STARTED) {
+      updateAuthBadge();
+      render();
+      return;
+    }
+    window.__LUMAX_STARTED = true;
     bootstrap();
-  });
+  }
+  window.__lumaxStart = startApp;
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startApp);
+  } else {
+    startApp();
+  }
 })();
