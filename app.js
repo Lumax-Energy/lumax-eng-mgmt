@@ -4248,9 +4248,11 @@
     bootstrap();
   }
   window.__lumaxStart = startApp;
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", startApp);
-  } else {
-    startApp();
+  if (!window.__LUMAX_WAIT_FOR_REACT) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", startApp);
+    } else {
+      startApp();
+    }
   }
 })();
