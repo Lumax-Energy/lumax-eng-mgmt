@@ -1,6 +1,6 @@
 {
-  "version": 2.3,
-  "updatedAt": "2026-09-16T06:41:31.563Z",
+  "version": 2.4,
+  "updatedAt": "2026-09-16T09:56:44.471Z",
   "settings": {
     "taskStatuses": [
       {
@@ -116,7 +116,7 @@
       "contact": "+27 10 140 4933"
     },
     "scfYear": 2026,
-    "scfSeq": 2,
+    "scfSeq": 3,
     "voidedLetters": []
   },
   "projects": [
@@ -139,6 +139,14 @@
         "BRI-CP-ST-001"
       ],
       "customFields": {},
+      "structuralDesign": {
+        "designed": false,
+        "checked": false
+      },
+      "foundationDesign": {
+        "designed": false,
+        "checked": false
+      },
       "phases": [
         {
           "id": "phase-dtotafuszk5w",
@@ -216,6 +224,14 @@
         "BRI-CP-ST-001 to BRI-CP-ST-002"
       ],
       "customFields": {},
+      "structuralDesign": {
+        "designed": false,
+        "checked": false
+      },
+      "foundationDesign": {
+        "designed": false,
+        "checked": false
+      },
       "phases": [
         {
           "id": "phase-rljrexkz0ki6",
@@ -289,6 +305,14 @@
         "BRI-CP-ST-011 to BRI-CP-ST-012"
       ],
       "customFields": {},
+      "structuralDesign": {
+        "designed": false,
+        "checked": false
+      },
+      "foundationDesign": {
+        "designed": false,
+        "checked": false
+      },
       "phases": [
         {
           "id": "phase-fs0tr9esg6t4",
@@ -368,6 +392,14 @@
         "BRI-CP-ST-012 & BRI-CP-ST-013"
       ],
       "customFields": {},
+      "structuralDesign": {
+        "designed": false,
+        "checked": false
+      },
+      "foundationDesign": {
+        "designed": false,
+        "checked": false
+      },
       "phases": [
         {
           "id": "phase-9r9c5j28k4xh",
@@ -453,13 +485,13 @@
       "title": "87.2x47x1.5mm TOP HAT Design Check for 15° GM",
       "description": "",
       "type": "design_check",
-      "statusId": "status-doing",
+      "statusId": "status-done",
       "assignee": "Lucian",
       "priority": "high",
       "dueDate": "2026-09-10",
       "phaseId": null,
       "blockedReason": "",
-      "doneDate": null,
+      "doneDate": "2026-09-16",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -469,7 +501,7 @@
       "rev": "",
       "discipline": "",
       "createdAt": "2026-09-09T11:31:30.661Z",
-      "updatedAt": "2026-09-09T11:31:30.661Z"
+      "updatedAt": "2026-09-16T06:41:44.912Z"
     },
     {
       "id": "task-cqlk0uivr03v",
