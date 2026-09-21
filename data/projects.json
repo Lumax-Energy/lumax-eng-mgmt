@@ -1,6 +1,6 @@
 {
   "version": 2.4,
-  "updatedAt": "2026-09-21T11:01:18.418Z",
+  "updatedAt": "2026-09-21T12:57:01.930Z",
   "settings": {
     "taskStatuses": [
       {
@@ -725,6 +725,30 @@
       "title": "Lumax Energy - SLA",
       "description": "Create a Service Level Agreement",
       "type": "eng_task",
+      "statusId": "status-done",
+      "assignee": "Lucian",
+      "priority": "high",
+      "dueDate": "2026-09-22",
+      "phaseId": null,
+      "blockedReason": "",
+      "doneDate": "2026-09-21",
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Structural Management",
+      "createdAt": "2026-09-21T11:01:11.631Z",
+      "updatedAt": "2026-09-21T12:56:50.807Z"
+    },
+    {
+      "id": "task-3xxnd99kjjzm",
+      "projectId": null,
+      "title": "ACES Africa - Marthinusen",
+      "description": "Ballast Report",
+      "type": "report_writing",
       "statusId": "status-doing",
       "assignee": "Lucian",
       "priority": "high",
@@ -739,9 +763,9 @@
       "calcOrDrawingRef": "",
       "drawingNumber": "",
       "rev": "",
-      "discipline": "Structural Management",
-      "createdAt": "2026-09-21T11:01:11.631Z",
-      "updatedAt": "2026-09-21T11:01:11.631Z"
+      "discipline": "Structural",
+      "createdAt": "2026-09-21T11:18:38.578Z",
+      "updatedAt": "2026-09-21T11:18:38.578Z"
     }
   ]
 }
