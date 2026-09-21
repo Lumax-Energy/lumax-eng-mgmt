@@ -1,6 +1,6 @@
 {
   "version": 2.4,
-  "updatedAt": "2026-09-18T14:24:00.643Z",
+  "updatedAt": "2026-09-21T11:01:18.418Z",
   "settings": {
     "taskStatuses": [
       {
@@ -718,6 +718,30 @@
       "discipline": "Rooftop SH - WLR",
       "createdAt": "2026-09-18T14:23:48.557Z",
       "updatedAt": "2026-09-18T14:23:48.557Z"
+    },
+    {
+      "id": "task-8j17u397x45r",
+      "projectId": null,
+      "title": "Lumax Energy - SLA",
+      "description": "Create a Service Level Agreement",
+      "type": "eng_task",
+      "statusId": "status-doing",
+      "assignee": "Lucian",
+      "priority": "high",
+      "dueDate": "2026-09-22",
+      "phaseId": null,
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Structural Management",
+      "createdAt": "2026-09-21T11:01:11.631Z",
+      "updatedAt": "2026-09-21T11:01:11.631Z"
     }
   ]
 }
