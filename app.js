@@ -485,56 +485,149 @@
     return (state.data.tasks || []).filter((t) => t.projectId === projectId);
   }
   function allTasksFiltered() {
+    return (state.data.tasks || []).filter((t) => taskPassesTaskFilters(t));
+  }
+
+  function taskPassesTaskFilters(t, opts) {
+    opts = opts || {};
     const q = (state.search || "").trim().toLowerCase();
     const f = state.taskFilters;
-    return (state.data.tasks || []).filter((t) => {
-      if (f.type && t.type !== f.type) return false;
-      if (f.statusId && t.statusId !== f.statusId) return false;
-      if (f.assignee && (t.assignee || "").toLowerCase() !== f.assignee.toLowerCase()) return false;
-      if (f.projectId === "__standalone__" && t.projectId) return false;
-      if (f.projectId && f.projectId !== "__standalone__" && t.projectId !== f.projectId) return false;
-      if (f.client) {
+    if (f.type && t.type !== f.type) return false;
+    if (f.statusId && t.statusId !== f.statusId) return false;
+    if (f.assignee && (t.assignee || "").toLowerCase() !== f.assignee.toLowerCase()) return false;
+    if (f.projectId === "__standalone__" && t.projectId) return false;
+    if (f.projectId && f.projectId !== "__standalone__" && t.projectId !== f.projectId) return false;
+    if (f.client) {
+      const p = t.projectId ? getProject(t.projectId) : null;
+      if (!p || (p.clientName || "").toLowerCase() !== f.client.toLowerCase()) return false;
+    }
+    if (f.structureType) {
+      const want = String(f.structureType).toLowerCase();
+      const taskStructs = [];
+      if (t.structureType) taskStructs.push(String(t.structureType));
+      if (Array.isArray(t.structureTypes)) taskStructs.push.apply(taskStructs, t.structureTypes);
+      if (taskStructs.length) {
+        if (!taskStructs.some((s) => String(s).toLowerCase() === want)) return false;
+      } else {
         const p = t.projectId ? getProject(t.projectId) : null;
-        if (!p || (p.clientName || "").toLowerCase() !== f.client.toLowerCase()) return false;
+        const structs = (p && p.structureTypes) || [];
+        if (!structs.some((s) => String(s).toLowerCase() === want)) return false;
       }
-      if (f.structureType) {
-        const want = String(f.structureType).toLowerCase();
-        const taskStructs = [];
-        if (t.structureType) taskStructs.push(String(t.structureType));
-        if (Array.isArray(t.structureTypes)) taskStructs.push.apply(taskStructs, t.structureTypes);
-        if (taskStructs.length) {
-          if (!taskStructs.some((s) => String(s).toLowerCase() === want)) return false;
-        } else {
-          const p = t.projectId ? getProject(t.projectId) : null;
-          const structs = (p && p.structureTypes) || [];
-          if (!structs.some((s) => String(s).toLowerCase() === want)) return false;
-        }
-      }
-      if (f.overdueOnly && !isOverdue(t)) return false;
-      // Hide completed unless the status filter is explicitly a done status
-      if (f.hideCompleted && statusIsDone(t.statusId) && !(f.statusId && statusIsDone(f.statusId))) return false;
-      if (q) {
-        const p = t.projectId ? getProject(t.projectId) : null;
-        const hay = [
-          t.title,
-          t.description,
-          t.assignee,
-          t.type,
-          typeLabel(t.type),
-          t.refNumber,
-          t.drawingNumber,
-          t.discipline,
-          p && p.projectCode,
-          p && p.projectName,
-          p && p.clientName,
-        ]
-          .join(" ")
-          .toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
+    }
+    if (!opts.skipOverdue && f.overdueOnly && !isOverdue(t)) return false;
+    if (!opts.skipHideCompleted && f.hideCompleted && statusIsDone(t.statusId) && !(f.statusId && statusIsDone(f.statusId))) return false;
+    if (q) {
+      const p = t.projectId ? getProject(t.projectId) : null;
+      const hay = [
+        t.title,
+        t.description,
+        t.assignee,
+        t.type,
+        typeLabel(t.type),
+        t.refNumber,
+        t.drawingNumber,
+        t.discipline,
+        p ? p.projectName : "",
+        p ? p.projectCode : "",
+        p ? p.clientName : "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
   }
+
+  function completedMonthKey(task) {
+    const d = (task && task.doneDate) || "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d.slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(d)) return d;
+    return "unknown";
+  }
+
+  function completedMonthLabel(key) {
+    if (key === "unknown") return "No completed date";
+    const parts = String(key).split("-");
+    if (parts.length !== 2) return key;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (!y || !m) return key;
+    const dt = new Date(y, m - 1, 1);
+    return dt.toLocaleString(undefined, { month: "long", year: "numeric" });
+  }
+
+  /** Completed tasks that match current filters, for the month archive under Hide completed. */
+  function completedTasksMatchingFilters() {
+    return (state.data.tasks || [])
+      .filter((t) => statusIsDone(t.statusId) && taskPassesTaskFilters(t, { skipHideCompleted: true, skipOverdue: true }))
+      .sort((a, b) => String(b.doneDate || "").localeCompare(String(a.doneDate || "")) || String(a.title || "").localeCompare(String(b.title || "")));
+  }
+
+  function groupCompletedByMonth(tasks) {
+    const map = new Map();
+    (tasks || []).forEach((t) => {
+      const key = completedMonthKey(t);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(t);
+    });
+    const keys = [...map.keys()].sort((a, b) => {
+      if (a === "unknown") return 1;
+      if (b === "unknown") return -1;
+      return b.localeCompare(a);
+    });
+    return keys.map((key) => ({ key, label: completedMonthLabel(key), tasks: map.get(key) }));
+  }
+
+  function taskTableRowHtml(t) {
+    const p = t.projectId ? getProject(t.projectId) : null;
+    const st = getStatus(t.statusId);
+    return (
+      `<tr class="${isOverdue(t) ? "overdue" : ""}" data-task="${escapeHtml(t.id)}">` +
+      `<td><span class="type-chip">${escapeHtml(typeLabel(t.type))}</span></td>` +
+      `<td>${escapeHtml(t.title)}</td>` +
+      `<td>${escapeHtml(p ? p.projectCode || p.projectName : "—")}</td>` +
+      `<td>${escapeHtml(st ? st.name : t.statusId)}</td>` +
+      `<td>${escapeHtml(t.assignee || "—")}</td>` +
+      `<td><span class="priority ${escapeHtml(t.priority)}">${escapeHtml(t.priority)}</span></td>` +
+      `<td>${escapeHtml(t.dueDate || "—")}</td>` +
+      `<td>${escapeHtml(t.doneDate || "—")}</td>` +
+      `<td class="task-done-cell">${markDoneButtonHtml(t)}</td>` +
+      `</tr>`
+    );
+  }
+
+  function renderCompletedByMonthHtml() {
+    const f = state.taskFilters;
+    if (!f.hideCompleted) return "";
+    if (f.statusId && statusIsDone(f.statusId)) return "";
+    const groups = groupCompletedByMonth(completedTasksMatchingFilters());
+    if (!groups.length) {
+      return `<div class="completed-by-month"><h2>Completed by month</h2><p class="hint">No completed tasks match the current filters.</p></div>`;
+    }
+    const total = groups.reduce((n, g) => n + g.tasks.length, 0);
+    return (
+      `<div class="completed-by-month">` +
+      `<h2>Completed by month <span class="stat-sub">(${total})</span></h2>` +
+      `<p class="hint">Hidden from the main list while Hide completed is on. Grouped by completed date.</p>` +
+      groups
+        .map((g) => {
+          return (
+            `<details class="month-group" open>` +
+            `<summary><span class="month-label">${escapeHtml(g.label)}</span><span class="count">${g.tasks.length}</span></summary>` +
+            `<div class="tasks-table-wrap"><table class="tasks-table"><thead><tr>` +
+            `<th>Type</th><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Priority</th><th>Due</th><th>Completed</th><th></th>` +
+            `</tr></thead><tbody>` +
+            g.tasks.map(taskTableRowHtml).join("") +
+            `</tbody></table></div>` +
+            `</details>`
+          );
+        })
+        .join("") +
+      `</div>`
+    );
+  }
+
+
   function openTaskCount(project) {
     return projectTasks(project.id).filter((t) => statusIsOpen(t.statusId)).length;
   }
@@ -2882,6 +2975,7 @@
       `</div>`;
 
     const tasks = allTasksFiltered().sort((a, b) => String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")));
+    const completedArchiveHtml = renderCompletedByMonthHtml();
 
     let body = "";
     if (state.tasksMode === "board") {
@@ -2892,39 +2986,20 @@
         `<th>Type</th><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Priority</th><th>Due</th><th>Completed</th><th></th>` +
         `</tr></thead><tbody>` +
         (tasks.length
-          ? tasks
-              .map((t) => {
-                const p = t.projectId ? getProject(t.projectId) : null;
-                const st = getStatus(t.statusId);
-                return (
-                  `<tr class="${isOverdue(t) ? "overdue" : ""}" data-task="${escapeHtml(t.id)}">` +
-                  `<td><span class="type-chip">${escapeHtml(typeLabel(t.type))}</span></td>` +
-                  `<td>${escapeHtml(t.title)}</td>` +
-                  `<td>${escapeHtml(p ? p.projectCode || p.projectName : "—")}</td>` +
-                  `<td>${escapeHtml(st ? st.name : t.statusId)}</td>` +
-                  `<td>${escapeHtml(t.assignee || "—")}</td>` +
-                  `<td><span class="priority ${escapeHtml(t.priority)}">${escapeHtml(t.priority)}</span></td>` +
-                  `<td>${escapeHtml(t.dueDate || "—")}</td>` +
-                  `<td>${escapeHtml(t.doneDate || "—")}</td>` +
-                  `<td class="task-done-cell">${markDoneButtonHtml(t)}</td>` +
-                  `</tr>`
-                );
-              })
-              .join("")
+          ? tasks.map(taskTableRowHtml).join("")
           : `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:1.5rem">No tasks match filters</td></tr>`) +
         `</tbody></table></div>`;
     }
 
-    root.innerHTML = filterBar + body;
+    root.innerHTML = filterBar + body + completedArchiveHtml;
 
     if (state.tasksMode === "board") {
       renderBoard(document.getElementById("tasks-board"), tasks, null);
-    } else {
-      root.querySelectorAll("tbody tr[data-task]").forEach((row) => {
-        row.addEventListener("click", () => openTaskForm(row.dataset.task));
-      });
-      bindMarkDoneButtons(root);
     }
+    root.querySelectorAll("tbody tr[data-task]").forEach((row) => {
+      row.addEventListener("click", () => openTaskForm(row.dataset.task));
+    });
+    bindMarkDoneButtons(root);
 
     function syncFilters() {
       state.taskFilters.type = document.getElementById("tf-filter-type").value;
