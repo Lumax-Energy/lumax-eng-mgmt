@@ -1,6 +1,6 @@
 {
   "version": 2.4,
-  "updatedAt": "2026-09-22T13:46:05.699Z",
+  "updatedAt": "2026-09-22T13:50:19.104Z",
   "settings": {
     "taskStatuses": [
       {
@@ -509,13 +509,13 @@
       "title": "Easy Power Solar - NuHarvest",
       "description": "Create a POT Report using Pile test results.",
       "type": "eng_task",
-      "statusId": "status-in-check",
+      "statusId": "status-done",
       "assignee": "Lucian",
       "priority": "high",
       "dueDate": "2026-09-10",
       "phaseId": null,
       "blockedReason": "",
-      "doneDate": "2026-09-10",
+      "doneDate": "2026-09-22",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -525,7 +525,7 @@
       "rev": "",
       "discipline": "Geotechnical",
       "createdAt": "2026-09-10T06:40:07.243Z",
-      "updatedAt": "2026-09-10T06:40:07.243Z"
+      "updatedAt": "2026-09-22T13:46:40.350Z"
     },
     {
       "id": "task-vjvi931m99yh",
@@ -539,7 +539,7 @@
       "dueDate": "2026-09-16",
       "phaseId": null,
       "blockedReason": "",
-      "doneDate": "2026-09-16",
+      "doneDate": null,
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -549,7 +549,7 @@
       "rev": "",
       "discipline": "Structural",
       "createdAt": "2026-09-14T13:04:55.721Z",
-      "updatedAt": "2026-09-14T17:46:55.725Z"
+      "updatedAt": "2026-09-22T13:47:37.246Z"
     },
     {
       "id": "task-41ny36j4dmf0",
