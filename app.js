@@ -9,6 +9,7 @@
 
   const LS_DATA = "lumax-eng-mgmt-data";
   const LS_SETTINGS = "lumax-eng-mgmt-settings";
+  const LS_UI = "lumax-eng-mgmt-ui";
   const LS_SHA = "lumax-eng-mgmt-sha";
   const DEFAULT_OWNER = "Lumax-Energy";
   const DEFAULT_REPO = "lumax-eng-mgmt";
@@ -185,7 +186,7 @@
     selectedPhaseId: "all",
     showArchived: false,
     search: "",
-    taskFilters: { type: "", statusId: "", assignee: "", overdueOnly: false, projectId: "", client: "", structureType: "" },
+    taskFilters: { type: "", statusId: "", assignee: "", overdueOnly: false, projectId: "", client: "", structureType: "", hideCompleted: loadUiPrefs().hideCompleted },
     projectFilters: { client: "", dashboardView: null },
     dashboardView: null, // id from DASHBOARD_VIEWS, or null
     tasksMode: "list", // list | board
@@ -310,6 +311,40 @@
   }
   function saveBrowserSettings() {
     localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
+  }
+  function loadUiPrefs() {
+    try {
+      const raw = localStorage.getItem(LS_UI);
+      if (raw) {
+        const u = JSON.parse(raw);
+        return { hideCompleted: !!u.hideCompleted };
+      }
+    } catch (_) {}
+    return { hideCompleted: false };
+  }
+  function saveUiPrefs() {
+    localStorage.setItem(LS_UI, JSON.stringify({ hideCompleted: !!(state.taskFilters && state.taskFilters.hideCompleted) }));
+  }
+  /** Fresh task filter object; keeps hideCompleted unless overridden. */
+  function blankTaskFilters(overrides) {
+    const hide =
+      overrides && Object.prototype.hasOwnProperty.call(overrides, "hideCompleted")
+        ? !!overrides.hideCompleted
+        : !!(state.taskFilters && state.taskFilters.hideCompleted);
+    return Object.assign(
+      {
+        type: "",
+        statusId: "",
+        assignee: "",
+        overdueOnly: false,
+        projectId: "",
+        client: "",
+        structureType: "",
+        hideCompleted: hide,
+      },
+      overrides || {},
+      { hideCompleted: hide }
+    );
   }
   function cacheDataLocally() {
     try {
@@ -476,6 +511,8 @@
         }
       }
       if (f.overdueOnly && !isOverdue(t)) return false;
+      // Hide completed unless the status filter is explicitly a done status
+      if (f.hideCompleted && statusIsDone(t.statusId) && !(f.statusId && statusIsDone(f.statusId))) return false;
       if (q) {
         const p = t.projectId ? getProject(t.projectId) : null;
         const hay = [
@@ -1494,6 +1531,7 @@
         state.taskFilters.statusId ||
         state.taskFilters.assignee ||
         state.taskFilters.overdueOnly ||
+        state.taskFilters.hideCompleted ||
         state.taskFilters.projectId ||
         state.taskFilters.client ||
         state.taskFilters.structureType ||
@@ -2092,15 +2130,9 @@
       bindViewChips(root);
       root.querySelectorAll("[data-assignee]").forEach((btn) => {
         btn.onclick = () => {
-          state.taskFilters = {
-            type: "",
-            statusId: "",
+          state.taskFilters = blankTaskFilters({
             assignee: btn.dataset.assignee,
-            overdueOnly: false,
-            projectId: "",
-            client: "",
-            structureType: "",
-          };
+          });
           state.dashboardView = null;
           setView("tasks");
         };
@@ -2393,19 +2425,19 @@
     bindViewChips(root);
     root.querySelectorAll(".dash-filter-status").forEach((btn) => {
       btn.onclick = () => {
-        state.taskFilters = { type: "", statusId: btn.dataset.status, assignee: "", overdueOnly: false, projectId: "", client: "" };
+        state.taskFilters = blankTaskFilters({ statusId: btn.dataset.status });
         setView("tasks");
       };
     });
     root.querySelectorAll(".dash-filter-type").forEach((btn) => {
       btn.onclick = () => {
-        state.taskFilters = { type: btn.dataset.type, statusId: "", assignee: "", overdueOnly: false, projectId: "", client: "" };
+        state.taskFilters = blankTaskFilters({ type: btn.dataset.type });
         setView("tasks");
       };
     });
     root.querySelectorAll(".dash-filter-assignee").forEach((btn) => {
       btn.onclick = () => {
-        state.taskFilters = { type: "", statusId: "", assignee: btn.dataset.assignee, overdueOnly: true, projectId: "", client: "" };
+        state.taskFilters = blankTaskFilters({ assignee: btn.dataset.assignee, overdueOnly: true });
         setView("tasks");
       };
     });
@@ -2418,15 +2450,7 @@
     root.querySelectorAll("#exec-kpi-grid .kpi-card").forEach((btn) => {
       btn.onclick = () => {
         if (btn.dataset.overdue === "1") {
-          state.taskFilters = {
-            type: "",
-            statusId: "",
-            assignee: "",
-            overdueOnly: true,
-            projectId: "",
-            client: "",
-            structureType: "",
-          };
+          state.taskFilters = blankTaskFilters({ overdueOnly: true });
           state.dashboardView = null;
           setView("tasks");
           return;
@@ -2848,6 +2872,7 @@
       `<select id="tf-filter-project"><option value="">All projects</option><option value="__standalone__"${f.projectId === "__standalone__" ? " selected" : ""}>Standalone only</option>${(state.data.projects || []).map((p) => `<option value="${escapeHtml(p.id)}"${f.projectId === p.id ? " selected" : ""}>${escapeHtml(p.projectCode || p.projectName)}</option>`).join("")}</select>` +
       `<select id="tf-filter-structure" title="Structure type"><option value="">All structure types</option>${structureTypes.map((s) => `<option value="${escapeHtml(s)}"${f.structureType === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select>` +
       `<label class="checkbox-label"><input type="checkbox" id="tf-filter-overdue"${f.overdueOnly ? " checked" : ""}/> Overdue</label>` +
+      `<label class="checkbox-label"><input type="checkbox" id="tf-filter-hide-completed"${f.hideCompleted ? " checked" : ""}/> Hide completed</label>` +
       `<div class="spacer"></div>` +
       `<div class="view-toggle">` +
       `<button type="button" class="btn btn-secondary btn-sm${state.tasksMode === "list" ? " active" : ""}" id="btn-tasks-list">List</button>` +
@@ -2909,12 +2934,15 @@
       const stEl = document.getElementById("tf-filter-structure");
       state.taskFilters.structureType = stEl ? stEl.value : "";
       state.taskFilters.overdueOnly = document.getElementById("tf-filter-overdue").checked;
+      state.taskFilters.hideCompleted = document.getElementById("tf-filter-hide-completed").checked;
+      saveUiPrefs();
       renderTasksView();
     }
     ["tf-filter-type", "tf-filter-status", "tf-filter-assignee", "tf-filter-project", "tf-filter-structure"].forEach((id) => {
       document.getElementById(id).onchange = syncFilters;
     });
     document.getElementById("tf-filter-overdue").onchange = syncFilters;
+    document.getElementById("tf-filter-hide-completed").onchange = syncFilters;
     document.getElementById("btn-tasks-list").onclick = () => {
       state.tasksMode = "list";
       renderTasksView();
@@ -4198,15 +4226,7 @@
     }
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.onclick = () => {
-        state.taskFilters = {
-          type: "",
-          statusId: "",
-          assignee: "",
-          overdueOnly: false,
-          projectId: "",
-          client: "",
-          structureType: "",
-        };
+        state.taskFilters = blankTaskFilters();
         setView(btn.dataset.view);
       };
     });
