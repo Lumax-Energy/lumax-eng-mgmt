@@ -1,6 +1,6 @@
 {
   "version": 2.4,
-  "updatedAt": "2026-09-22T12:39:09.768Z",
+  "updatedAt": "2026-09-22T13:46:05.699Z",
   "settings": {
     "taskStatuses": [
       {
@@ -772,7 +772,7 @@
       "projectId": null,
       "title": "Steel GM - 2 x Reports",
       "description": "Report for Steel GM Cat B, Inland\nReport for Steel GM Cat B, Coastal",
-      "type": "report_writing",
+      "type": "eng_task",
       "statusId": "status-doing",
       "assignee": "Lucian",
       "priority": "medium",
