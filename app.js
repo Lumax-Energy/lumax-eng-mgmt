@@ -562,7 +562,14 @@
   function completedTasksMatchingFilters() {
     return (state.data.tasks || [])
       .filter((t) => statusIsDone(t.statusId) && taskPassesTaskFilters(t, { skipHideCompleted: true, skipOverdue: true }))
-      .sort((a, b) => String(b.doneDate || "").localeCompare(String(a.doneDate || "")) || String(a.title || "").localeCompare(String(b.title || "")));
+      .sort((a, b) => {
+        // Latest completed date first; then latest updatedAt; then title
+        const dd = String(b.doneDate || "").localeCompare(String(a.doneDate || ""));
+        if (dd) return dd;
+        const ua = String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+        if (ua) return ua;
+        return String(a.title || "").localeCompare(String(b.title || ""));
+      });
   }
 
   function groupCompletedByMonth(tasks) {
@@ -600,7 +607,7 @@
 
   function renderCompletedByMonthHtml() {
     const f = state.taskFilters;
-    // Always show completed tasks grouped by month (newest first), whether Hide completed is on or off.
+    // Always show completed tasks grouped by month (latest first), whether Hide completed is on or off.
     if (f.statusId && statusIsDone(f.statusId)) return "";
     const groups = groupCompletedByMonth(completedTasksMatchingFilters());
     if (!groups.length) {
@@ -610,7 +617,7 @@
     return (
       `<div class="completed-by-month">` +
       `<h2>Completed by month <span class="stat-sub">(${total})</span></h2>` +
-      `<p class="hint">Completed tasks are always grouped by completed date (newest month first). Open tasks stay in the list above.</p>` +
+      `<p class="hint">Completed tasks are always grouped by completed date (latest first). Open tasks stay in the list above.</p>` +
       groups
         .map((g) => {
           return (
