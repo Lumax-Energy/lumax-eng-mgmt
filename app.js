@@ -559,12 +559,20 @@
   }
 
   /** Completed tasks that match current filters, for the month archive under Hide completed. */
+  function completedDateKey(task) {
+    const d = (task && task.doneDate) || "";
+    // YYYY-MM-DD sorts correctly as text; missing dates sink when ordering most-recent-first
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+    if (/^\d{4}-\d{2}$/.test(d)) return d + "-01";
+    return "0000-00-00";
+  }
+
   function completedTasksMatchingFilters() {
     return (state.data.tasks || [])
       .filter((t) => statusIsDone(t.statusId) && taskPassesTaskFilters(t, { skipHideCompleted: true, skipOverdue: true }))
       .sort((a, b) => {
-        // Latest completed date first; then latest updatedAt; then title
-        const dd = String(b.doneDate || "").localeCompare(String(a.doneDate || ""));
+        // Most recently completed first (22 Sep above 16 Sep)
+        const dd = completedDateKey(b).localeCompare(completedDateKey(a));
         if (dd) return dd;
         const ua = String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
         if (ua) return ua;
@@ -607,35 +615,42 @@
 
   function renderCompletedByMonthHtml() {
     const f = state.taskFilters;
-    // Always show completed tasks grouped by month (latest first), whether Hide completed is on or off.
+    // Open tasks stay above. Completed below: most recently completed first.
     if (f.statusId && statusIsDone(f.statusId)) return "";
-    const groups = groupCompletedByMonth(completedTasksMatchingFilters());
-    if (!groups.length) {
-      return `<div class="completed-by-month"><h2>Completed by month</h2><p class="hint">No completed tasks match the current filters.</p></div>`;
+    const completed = completedTasksMatchingFilters();
+    if (!completed.length) {
+      return (
+        `<div class="completed-by-month">` +
+        `<h2>Completed</h2>` +
+        `<p class="hint">No completed tasks match the current filters.</p>` +
+        `</div>`
+      );
     }
-    const total = groups.reduce((n, g) => n + g.tasks.length, 0);
+    let lastMonth = null;
+    const bodyRows = completed
+      .map((t) => {
+        const key = completedMonthKey(t);
+        let sep = "";
+        if (key !== lastMonth) {
+          lastMonth = key;
+          sep =
+            `<tr class="month-sep"><td colspan="9"><span class="month-label">${escapeHtml(completedMonthLabel(key))}</span></td></tr>`;
+        }
+        return sep + taskTableRowHtml(t);
+      })
+      .join("");
     return (
       `<div class="completed-by-month">` +
-      `<h2>Completed by month <span class="stat-sub">(${total})</span></h2>` +
-      `<p class="hint">Completed tasks are always grouped by completed date (latest first). Open tasks stay in the list above.</p>` +
-      groups
-        .map((g) => {
-          return (
-            `<details class="month-group" open>` +
-            `<summary><span class="month-label">${escapeHtml(g.label)}</span><span class="count">${g.tasks.length}</span></summary>` +
-            `<div class="tasks-table-wrap"><table class="tasks-table"><thead><tr>` +
-            `<th>Type</th><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Priority</th><th>Due</th><th>Completed</th><th></th>` +
-            `</tr></thead><tbody>` +
-            g.tasks.map(taskTableRowHtml).join("") +
-            `</tbody></table></div>` +
-            `</details>`
-          );
-        })
-        .join("") +
+      `<h2>Completed <span class="stat-sub">(${completed.length})</span></h2>` +
+      `<p class="hint">Most recently completed at the top (e.g. 22 Sep above 16 Sep). Uncompleted tasks stay in the list above.</p>` +
+      `<div class="tasks-table-wrap"><table class="tasks-table"><thead><tr>` +
+      `<th>Type</th><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Priority</th><th>Due</th><th>Completed</th><th></th>` +
+      `</tr></thead><tbody>` +
+      bodyRows +
+      `</tbody></table></div>` +
       `</div>`
     );
   }
-
 
   function openTaskCount(project) {
     return projectTasks(project.id).filter((t) => statusIsOpen(t.statusId)).length;
