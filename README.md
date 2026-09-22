@@ -1,6 +1,8 @@
-# Lumax Energy — Engineering Management (v2.4)
+# Lumax Energy — Engineering Management (v2.4.1)
 
 Single-page static app for engineering project & task tracking. No build step. Works on **GitHub Pages** or any static host.
+
+**v2.4.1** Tasks **Hide completed** actually hides the Completed list (no full-view rebuild, cache-bust `app.js?v=2.4.1`). Label shows count. Default on for first visit.
 
 **v2.4** Mark as Done (status → Done + completed date = click day, Africa/Johannesburg) · SC Letter **SO No.** under Invoice No. · SC Letter **Structural Design** / **Foundation Design** blocks (Designed + Checked).
 
@@ -85,6 +87,8 @@ Chips also include: Clients · Engineer · Structure type · Structural Conforma
 Defaults (editable in Settings — add / edit / remove): RDN · Design check · Drawing · Eng task · Site visit · Calculation · Review · Coordination · Other.
 
 Tasks view includes a **Structure type** dropdown (project `structureTypes` / task override).
+
+**Hide completed** (Tasks filter bar) hides the Completed archive under the open-task list. Open tasks always stay visible. Preference is stored in `localStorage` (`lumax-eng-mgmt-ui`).
 
 ### Structure types (defaults)
 

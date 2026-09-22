@@ -1,5 +1,5 @@
 /**
- * Lumax Energy — Engineering Management v2.4
+ * Lumax Energy — Engineering Management v2.4.1
  * Vanilla JS SPA: Dashboard · Projects · Tasks + Structural Conformance Letter + exec KPIs + GitHub sync + Excel.
  */
 (function () {
@@ -317,10 +317,12 @@
       const raw = localStorage.getItem(LS_UI);
       if (raw) {
         const u = JSON.parse(raw);
-        return { hideCompleted: !!u.hideCompleted };
+        if (u && Object.prototype.hasOwnProperty.call(u, "hideCompleted")) {
+          return { hideCompleted: !!u.hideCompleted };
+        }
       }
     } catch (_) {}
-    return { hideCompleted: false };
+    return { hideCompleted: true };
   }
   function saveUiPrefs() {
     localStorage.setItem(LS_UI, JSON.stringify({ hideCompleted: !!(state.taskFilters && state.taskFilters.hideCompleted) }));
@@ -616,13 +618,14 @@
   function renderCompletedByMonthHtml() {
     const f = state.taskFilters;
     // Open tasks stay above. Completed below: most recently completed first.
-    // Hide completed checkbox hides this whole section.
-    if (f.hideCompleted) return "";
+    // Always keep the node in the DOM; Hide completed toggles the hidden attribute
+    // without replacing the checkbox (innerHTML replace on change looked like a no-op).
     if (f.statusId && statusIsDone(f.statusId)) return "";
     const completed = completedTasksMatchingFilters();
+    const hiddenAttr = f.hideCompleted ? " hidden" : "";
     if (!completed.length) {
       return (
-        `<div class="completed-by-month">` +
+        `<div class="completed-by-month" id="completed-archive"${hiddenAttr}>` +
         `<h2>Completed</h2>` +
         `<p class="hint">No completed tasks match the current filters.</p>` +
         `</div>`
@@ -642,9 +645,9 @@
       })
       .join("");
     return (
-      `<div class="completed-by-month">` +
+      `<div class="completed-by-month" id="completed-archive"${hiddenAttr}>` +
       `<h2>Completed <span class="stat-sub">(${completed.length})</span></h2>` +
-      `<p class="hint">Most recently completed at the top (e.g. 22 Sep above 16 Sep). Uncompleted tasks stay above. Use Hide completed to hide this section.</p>` +
+      `<p class="hint">Most recently completed at the top. Uncheck Hide completed to show this list.</p>` +
       `<div class="tasks-table-wrap"><table class="tasks-table"><thead><tr>` +
       `<th>Type</th><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Priority</th><th>Due</th><th>Completed</th><th></th>` +
       `</tr></thead><tbody>` +
@@ -2983,6 +2986,7 @@
     const f = state.taskFilters;
 
     const structureTypes = uniqueStructureTypes();
+    const completedArchiveCount = completedTasksMatchingFilters().length;
     const filterBar =
       `<div class="filter-row">` +
       `<select id="tf-filter-type"><option value="">All types</option>${getTaskTypes().map((ty) => `<option value="${ty.id}"${f.type === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`).join("")}</select>` +
@@ -2991,7 +2995,7 @@
       `<select id="tf-filter-project"><option value="">All projects</option><option value="__standalone__"${f.projectId === "__standalone__" ? " selected" : ""}>Standalone only</option>${(state.data.projects || []).map((p) => `<option value="${escapeHtml(p.id)}"${f.projectId === p.id ? " selected" : ""}>${escapeHtml(p.projectCode || p.projectName)}</option>`).join("")}</select>` +
       `<select id="tf-filter-structure" title="Structure type"><option value="">All structure types</option>${structureTypes.map((s) => `<option value="${escapeHtml(s)}"${f.structureType === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select>` +
       `<label class="checkbox-label"><input type="checkbox" id="tf-filter-overdue"${f.overdueOnly ? " checked" : ""}/> Overdue</label>` +
-      `<label class="checkbox-label" title="Hide the Completed section below. Open tasks always stay in the list above."><input type="checkbox" id="tf-filter-hide-completed"${f.hideCompleted ? " checked" : ""}/> Hide completed</label>` +
+      `<label class="checkbox-label hide-completed-label" title="Hide the Completed list below the open tasks. Open tasks always stay visible."><input type="checkbox" id="tf-filter-hide-completed"${f.hideCompleted ? " checked" : ""}/> Hide completed${completedArchiveCount ? " (" + completedArchiveCount + ")" : ""}</label>` +
       
       `<div class="spacer"></div>` +
       `<div class="view-toggle">` +
@@ -3046,7 +3050,15 @@
     });
     document.getElementById("tf-filter-overdue").onchange = syncFilters;
     const hideCompletedEl = document.getElementById("tf-filter-hide-completed");
-    if (hideCompletedEl) hideCompletedEl.onchange = syncFilters;
+    if (hideCompletedEl) {
+      hideCompletedEl.onchange = (e) => {
+        e.stopPropagation();
+        state.taskFilters.hideCompleted = !!e.target.checked;
+        saveUiPrefs();
+        const archive = document.getElementById("completed-archive");
+        if (archive) archive.hidden = !!e.target.checked;
+      };
+    }
     document.getElementById("btn-tasks-list").onclick = () => {
       state.tasksMode = "list";
       renderTasksView();
