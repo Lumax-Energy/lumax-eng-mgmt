@@ -616,6 +616,8 @@
   function renderCompletedByMonthHtml() {
     const f = state.taskFilters;
     // Open tasks stay above. Completed below: most recently completed first.
+    // Hide completed checkbox hides this whole section.
+    if (f.hideCompleted) return "";
     if (f.statusId && statusIsDone(f.statusId)) return "";
     const completed = completedTasksMatchingFilters();
     if (!completed.length) {
@@ -642,7 +644,7 @@
     return (
       `<div class="completed-by-month">` +
       `<h2>Completed <span class="stat-sub">(${completed.length})</span></h2>` +
-      `<p class="hint">Most recently completed at the top (e.g. 22 Sep above 16 Sep). Uncompleted tasks stay in the list above.</p>` +
+      `<p class="hint">Most recently completed at the top (e.g. 22 Sep above 16 Sep). Uncompleted tasks stay above. Use Hide completed to hide this section.</p>` +
       `<div class="tasks-table-wrap"><table class="tasks-table"><thead><tr>` +
       `<th>Type</th><th>Title</th><th>Project</th><th>Status</th><th>Assignee</th><th>Priority</th><th>Due</th><th>Completed</th><th></th>` +
       `</tr></thead><tbody>` +
@@ -2989,7 +2991,7 @@
       `<select id="tf-filter-project"><option value="">All projects</option><option value="__standalone__"${f.projectId === "__standalone__" ? " selected" : ""}>Standalone only</option>${(state.data.projects || []).map((p) => `<option value="${escapeHtml(p.id)}"${f.projectId === p.id ? " selected" : ""}>${escapeHtml(p.projectCode || p.projectName)}</option>`).join("")}</select>` +
       `<select id="tf-filter-structure" title="Structure type"><option value="">All structure types</option>${structureTypes.map((s) => `<option value="${escapeHtml(s)}"${f.structureType === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select>` +
       `<label class="checkbox-label"><input type="checkbox" id="tf-filter-overdue"${f.overdueOnly ? " checked" : ""}/> Overdue</label>` +
-      `<label class="checkbox-label" title="Open tasks stay above. Completed are listed by month below whether this is on or off."><input type="checkbox" id="tf-filter-hide-completed"${f.hideCompleted ? " checked" : ""}/> Hide completed</label>` +
+      `<label class="checkbox-label" title="Hide the Completed section below. Open tasks always stay in the list above."><input type="checkbox" id="tf-filter-hide-completed"${f.hideCompleted ? " checked" : ""}/> Hide completed</label>` +
       
       `<div class="spacer"></div>` +
       `<div class="view-toggle">` +
