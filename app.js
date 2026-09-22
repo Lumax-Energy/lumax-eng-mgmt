@@ -515,7 +515,9 @@
       }
     }
     if (!opts.skipOverdue && f.overdueOnly && !isOverdue(t)) return false;
-    if (!opts.skipHideCompleted && f.hideCompleted && statusIsDone(t.statusId) && !(f.statusId && statusIsDone(f.statusId))) return false;
+    // Main list/board: keep completed out unless a done status is explicitly selected.
+    // Completed tasks are shown in the month archive instead (see renderCompletedByMonthHtml).
+    if (!opts.skipHideCompleted && statusIsDone(t.statusId) && !(f.statusId && statusIsDone(f.statusId))) return false;
     if (q) {
       const p = t.projectId ? getProject(t.projectId) : null;
       const hay = [
@@ -598,7 +600,7 @@
 
   function renderCompletedByMonthHtml() {
     const f = state.taskFilters;
-    if (!f.hideCompleted) return "";
+    // Always show completed tasks grouped by month (newest first), whether Hide completed is on or off.
     if (f.statusId && statusIsDone(f.statusId)) return "";
     const groups = groupCompletedByMonth(completedTasksMatchingFilters());
     if (!groups.length) {
@@ -608,7 +610,7 @@
     return (
       `<div class="completed-by-month">` +
       `<h2>Completed by month <span class="stat-sub">(${total})</span></h2>` +
-      `<p class="hint">Hidden from the main list while Hide completed is on. Grouped by completed date.</p>` +
+      `<p class="hint">Completed tasks are always grouped by completed date (newest month first). Open tasks stay in the list above.</p>` +
       groups
         .map((g) => {
           return (
@@ -2965,7 +2967,8 @@
       `<select id="tf-filter-project"><option value="">All projects</option><option value="__standalone__"${f.projectId === "__standalone__" ? " selected" : ""}>Standalone only</option>${(state.data.projects || []).map((p) => `<option value="${escapeHtml(p.id)}"${f.projectId === p.id ? " selected" : ""}>${escapeHtml(p.projectCode || p.projectName)}</option>`).join("")}</select>` +
       `<select id="tf-filter-structure" title="Structure type"><option value="">All structure types</option>${structureTypes.map((s) => `<option value="${escapeHtml(s)}"${f.structureType === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select>` +
       `<label class="checkbox-label"><input type="checkbox" id="tf-filter-overdue"${f.overdueOnly ? " checked" : ""}/> Overdue</label>` +
-      `<label class="checkbox-label"><input type="checkbox" id="tf-filter-hide-completed"${f.hideCompleted ? " checked" : ""}/> Hide completed</label>` +
+      `<label class="checkbox-label" title="Open tasks stay above. Completed are listed by month below whether this is on or off."><input type="checkbox" id="tf-filter-hide-completed"${f.hideCompleted ? " checked" : ""}/> Hide completed</label>` +
+      
       `<div class="spacer"></div>` +
       `<div class="view-toggle">` +
       `<button type="button" class="btn btn-secondary btn-sm${state.tasksMode === "list" ? " active" : ""}" id="btn-tasks-list">List</button>` +
@@ -3009,7 +3012,8 @@
       const stEl = document.getElementById("tf-filter-structure");
       state.taskFilters.structureType = stEl ? stEl.value : "";
       state.taskFilters.overdueOnly = document.getElementById("tf-filter-overdue").checked;
-      state.taskFilters.hideCompleted = document.getElementById("tf-filter-hide-completed").checked;
+      const hideEl = document.getElementById("tf-filter-hide-completed");
+      if (hideEl) state.taskFilters.hideCompleted = hideEl.checked;
       saveUiPrefs();
       renderTasksView();
     }
@@ -3017,7 +3021,8 @@
       document.getElementById(id).onchange = syncFilters;
     });
     document.getElementById("tf-filter-overdue").onchange = syncFilters;
-    document.getElementById("tf-filter-hide-completed").onchange = syncFilters;
+    const hideCompletedEl = document.getElementById("tf-filter-hide-completed");
+    if (hideCompletedEl) hideCompletedEl.onchange = syncFilters;
     document.getElementById("btn-tasks-list").onclick = () => {
       state.tasksMode = "list";
       renderTasksView();
