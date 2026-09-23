@@ -1,6 +1,6 @@
 {
   "version": 2.4,
-  "updatedAt": "2026-09-22T14:31:16.688Z",
+  "updatedAt": "2026-09-23T13:24:25.398Z",
   "settings": {
     "taskStatuses": [
       {
@@ -701,13 +701,13 @@
       "title": "CES (Cornerstone Energy Solutions) - Hartenbos Seafront Mall",
       "description": "",
       "type": "eng_task",
-      "statusId": "status-doing",
+      "statusId": "status-done",
       "assignee": "Lucian",
       "priority": "high",
       "dueDate": "2026-09-18",
       "phaseId": null,
       "blockedReason": "",
-      "doneDate": null,
+      "doneDate": "2026-09-23",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -717,7 +717,7 @@
       "rev": "",
       "discipline": "Rooftop SH - WLR",
       "createdAt": "2026-09-18T14:23:48.557Z",
-      "updatedAt": "2026-09-18T14:23:48.557Z"
+      "updatedAt": "2026-09-23T13:24:22.375Z"
     },
     {
       "id": "task-8j17u397x45r",
