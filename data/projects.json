@@ -1,6 +1,6 @@
 {
   "version": 2.4,
-  "updatedAt": "2026-09-23T13:24:25.398Z",
+  "updatedAt": "2026-09-23T15:04:09.749Z",
   "settings": {
     "taskStatuses": [
       {
@@ -814,6 +814,30 @@
       "discipline": "",
       "createdAt": "2026-09-22T12:39:06.701Z",
       "updatedAt": "2026-09-22T12:39:06.701Z"
+    },
+    {
+      "id": "task-td9xaleeh23e",
+      "projectId": null,
+      "title": "ERGO mini - Baseplate",
+      "description": "",
+      "type": "calculation",
+      "statusId": "status-doing",
+      "assignee": "Lucian",
+      "priority": "medium",
+      "dueDate": "2026-09-28",
+      "phaseId": null,
+      "blockedReason": "",
+      "doneDate": null,
+      "refNumber": "",
+      "raisedBy": "",
+      "responseDue": null,
+      "checker": "",
+      "calcOrDrawingRef": "",
+      "drawingNumber": "",
+      "rev": "",
+      "discipline": "Structural",
+      "createdAt": "2026-09-23T15:03:59.450Z",
+      "updatedAt": "2026-09-23T15:03:59.450Z"
     }
   ]
 }
