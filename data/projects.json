@@ -1,6 +1,6 @@
 {
   "version": 2.4,
-  "updatedAt": "2026-09-29T07:22:14.570Z",
+  "updatedAt": "2026-09-29T12:07:18.387Z",
   "settings": {
     "taskStatuses": [
       {
@@ -707,7 +707,7 @@
       "dueDate": "2026-09-18",
       "phaseId": null,
       "blockedReason": "",
-      "doneDate": "2026-09-23",
+      "doneDate": "2026-09-29",
       "refNumber": "",
       "raisedBy": "",
       "responseDue": null,
@@ -717,7 +717,7 @@
       "rev": "",
       "discipline": "Rooftop SH - WLR",
       "createdAt": "2026-09-18T14:23:48.557Z",
-      "updatedAt": "2026-09-23T13:24:22.375Z"
+      "updatedAt": "2026-09-29T12:07:14.341Z"
     },
     {
       "id": "task-8j17u397x45r",
@@ -747,9 +747,9 @@
       "id": "task-3xxnd99kjjzm",
       "projectId": null,
       "title": "ACES Africa - Marthinusen",
-      "description": "Ballast Report",
+      "description": "Ballast Report\nRedo all reports due to ballast being too much.",
       "type": "eng_task",
-      "statusId": "status-done",
+      "statusId": "status-doing",
       "assignee": "Lucian",
       "priority": "high",
       "dueDate": "2026-09-22",
@@ -765,7 +765,7 @@
       "rev": "",
       "discipline": "Structural",
       "createdAt": "2026-09-21T11:18:38.578Z",
-      "updatedAt": "2026-09-22T11:23:05.086Z"
+      "updatedAt": "2026-09-29T07:31:41.087Z"
     },
     {
       "id": "task-p75wypr7gq4k",
