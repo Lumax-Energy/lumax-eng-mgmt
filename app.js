@@ -504,9 +504,12 @@
   }
   function confirmDiscardUnsaved(what) {
     if (!dirty) return true;
-    return window.confirm(
+    const ok = window.confirm(
       "You have unsaved changes. " + what + " will replace them (a backup copy is kept in this browser). Continue?"
     );
+    // A dismissed (or browser-blocked) dialog must never look like "nothing happened".
+    if (!ok) toast("Cancelled — nothing was changed. (If no dialog appeared, your browser may be blocking pop-ups for this page.)", "error");
+    return ok;
   }
   function loadCachedData() {
     try {
