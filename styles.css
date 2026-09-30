@@ -651,3 +651,6 @@ button:disabled,
   max-width: 14rem;
 }
 #eng-filter option { color: #1b2a3a; background: #fff; }
+
+/* Token field: masked without type=password, so browsers don't offer to save it. */
+.secret-input { -webkit-text-security: disc; font-family: monospace; }

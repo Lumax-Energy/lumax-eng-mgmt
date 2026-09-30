@@ -1999,8 +1999,10 @@
       showOverlay(
         `<div class="panel" role="dialog"><h2>${escapeHtml(title)}</h2>` +
           (hint ? `<p class="hint">${escapeHtml(hint)}</p>` : "") +
-          `<div class="form-group"><label>Password</label><input id="pw-1" type="password" autocomplete="off" /></div>` +
-          (needConfirm ? `<div class="form-group"><label>Repeat password</label><input id="pw-2" type="password" autocomplete="off" /></div>` : "") +
+          // A real username field so the browser files the password under the engineer, not under the search box.
+          `<input type="text" name="username" autocomplete="username" value="${escapeHtml(myEngineerId())}" readonly hidden />` +
+          `<div class="form-group"><label>Password</label><input id="pw-1" type="password" autocomplete="${needConfirm ? "new-password" : "current-password"}" /></div>` +
+          (needConfirm ? `<div class="form-group"><label>Repeat password</label><input id="pw-2" type="password" autocomplete="new-password" /></div>` : "") +
           `<div class="panel-actions"><button type="button" class="btn btn-secondary" id="pw-cancel">Cancel</button><button type="button" class="btn" id="pw-ok">OK</button></div></div>`
       );
       let done = false;
@@ -3466,7 +3468,7 @@
       grid.innerHTML =
         '<div class="empty-state">' +
         (state.search
-          ? "No projects match this search."
+          ? 'No projects match the search <strong>“' + escapeHtml(state.search) + '”</strong>. <button type="button" class="btn btn-secondary btn-sm js-clear-search">Clear search</button>'
           : state.dashboardView || state.projectFilters.client
             ? "No projects match this view filter."
             : hasAny
@@ -3819,7 +3821,9 @@
         `</tr></thead><tbody>` +
         (tasks.length
           ? tasks.map(taskTableRowHtml).join("")
-          : `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:1.5rem">No tasks match filters</td></tr>`) +
+          : `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:1.5rem">No tasks match filters` +
+            (state.search ? ` or the search <strong>“${escapeHtml(state.search)}”</strong>. <button type="button" class="btn btn-secondary btn-sm js-clear-search">Clear search</button>` : "") +
+            `</td></tr>`) +
         `</tbody></table></div>`;
     }
 
@@ -4539,7 +4543,7 @@
         `<div class="form-group"><label>Shared repo (settings, letter numbers, team list)</label><input id="set-shared-repo" value="${escapeHtml(s.sharedRepo || DEFAULT_REPO + "-shared")}" /></div>` +
         `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="set-role-leader"${s.role === "leader" ? " checked" : ""}/> I am the team leader (unlock with a password to see all engineers)</label></div>` +
         `<div class="form-group"><label>Personal Access Token (PAT)</label>` +
-        `<input id="set-pat" type="password" autocomplete="off" value="" placeholder="${s.pat ? "•••• token saved — paste to replace" : "ghp_… or github_pat_…"}" />` +
+        `<input id="set-pat" type="text" class="secret-input" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" value="" placeholder="${s.pat ? "•••• token saved — paste to replace" : "ghp_… or github_pat_…"}" />` +
         `<p class="hint">Stored only in this browser's localStorage — never written to projects.json. Each engineer uses their own PAT.</p>` +
         (s.pat ? `<button type="button" class="btn btn-secondary btn-sm" id="set-remove-pat">Remove saved token</button>` : "") +
         `</div>` +
@@ -5359,7 +5363,18 @@
       e.target.value = "";
     });
     on("btn-new-project", "onclick", () => openProjectForm(null));
+    const searchEl = document.getElementById("global-search");
+    let searchTouched = false;
+    if (searchEl) {
+      ["keydown", "pointerdown", "paste"].forEach((ev) => searchEl.addEventListener(ev, () => (searchTouched = true)));
+      searchEl.value = "";
+    }
     on("global-search", "oninput", (e) => {
+      // Password managers sometimes fill this box as a "username"; only accept what the user typed.
+      if (!searchTouched) {
+        e.target.value = "";
+        return;
+      }
       state.search = e.target.value;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(render, 200);
@@ -5371,6 +5386,13 @@
   }
 
   let searchTimer = null;
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest || !e.target.closest(".js-clear-search")) return;
+    state.search = "";
+    const el = document.getElementById("global-search");
+    if (el) el.value = "";
+    render();
+  });
   function startApp() {
     wire();
     if (window.__LUMAX_STARTED) {

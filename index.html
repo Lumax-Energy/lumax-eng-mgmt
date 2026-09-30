@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Lumax Energy — Engineering Management</title>
-  <link rel="stylesheet" href="./styles.css?v=2.5.3" />
+  <link rel="stylesheet" href="./styles.css?v=2.5.4" />
   <script src="./vendor/xlsx-js-style.min.js"></script>
   <script src="./vendor/jszip.min.js"></script>
 </head>
@@ -12,7 +12,7 @@
   <header class="app-header">
     <div class="header-title">
       <h1>Lumax Energy — Eng Mgmt</h1>
-      <span class="version-badge">v2.5.3</span>
+      <span class="version-badge">v2.5.4</span>
     </div>
     <nav class="top-nav" id="top-nav" aria-label="Primary">
       <button type="button" class="nav-btn active" data-view="dashboard">Dashboard</button>
@@ -20,7 +20,7 @@
       <button type="button" class="nav-btn" data-view="tasks">Tasks</button>
     </nav>
     <div class="header-actions">
-      <input type="search" class="search-input header-search" id="global-search" placeholder="Search…" aria-label="Search" />
+      <input type="search" class="search-input header-search" id="global-search" name="lumax-search" placeholder="Search…" aria-label="Search" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" />
       <span class="auth-badge" id="auth-badge">Not signed in</span>
       <span class="last-sync" id="last-sync"></span>
       <select id="eng-filter" class="hidden" aria-label="Engineer" title="Leader view: filter by engineer"></select>
@@ -53,6 +53,6 @@
   <div class="overlay hidden" id="overlay"></div>
   <div class="status-bar" id="status-bar" aria-live="polite"></div>
 
-  <script src="./app.js?v=2.5.3"></script>
+  <script src="./app.js?v=2.5.4"></script>
 </body>
 </html>
