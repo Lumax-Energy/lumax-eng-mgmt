@@ -639,3 +639,15 @@ button:disabled,
 .hide-completed-label { font-weight: 600; color: var(--navy); }
 
 .btn.unsaved::after { content: " •"; color: #e67e22; font-weight: 700; }
+
+/* Leader view engineer filter: the header sets white text, so give the dropdown its own readable colours. */
+#eng-filter {
+  color: #1b2a3a;
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  max-width: 14rem;
+}
+#eng-filter option { color: #1b2a3a; background: #fff; }
