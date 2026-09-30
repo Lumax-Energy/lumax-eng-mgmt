@@ -14,6 +14,7 @@
   const LS_DIRTY = "lumax-eng-mgmt-dirty";
   const LS_BACKUP = "lumax-eng-mgmt-backup";
   const LS_LEADER = "lumax-eng-mgmt-leader-unlocked";
+  const LS_BASE = "lumax-eng-mgmt-base";
   const DEFAULT_OWNER = "Lumax-Energy";
   const DEFAULT_REPO = "lumax-eng-mgmt";
   const DATA_PATH = "data/projects.json";
@@ -194,6 +195,14 @@
     settings: loadBrowserSettings(),
     githubUser: null,
     fileSha: localStorage.getItem(LS_SHA) || null,
+    baseData: (function () {
+      try {
+        return JSON.parse(localStorage.getItem(LS_BASE) || "null");
+      } catch (_) {
+        return null;
+      }
+    })(),
+    teamLoaded: false,
     engFilter: "all",
     bases: {},
     engSettings: {},
@@ -423,11 +432,31 @@
       console.warn("backup failed", e);
     }
   }
+  // The copy of my own file as it was on GitHub at state.fileSha; the reference for three-way merges.
+  function setBase(data) {
+    state.baseData = data ? JSON.parse(JSON.stringify(data)) : null;
+    try {
+      if (state.baseData) localStorage.setItem(LS_BASE, JSON.stringify(state.baseData));
+      else localStorage.removeItem(LS_BASE);
+    } catch (_) {}
+  }
+  // Anything that replaces state.data with something other than a full team load
+  // makes the per-engineer bookkeeping meaningless; drop it so leader Save cannot act on it.
+  function forgetTeamState() {
+    state.bases = {};
+    state.engSettings = {};
+    state.teamLoaded = false;
+  }
   function restoreBackup() {
     try {
       const b = JSON.parse(localStorage.getItem(LS_BACKUP) || "null");
       if (!b || !b.data) return false;
       state.data = normalizeData(b.data);
+      // The restored copy is not what GitHub holds: next Save re-checks the remote first.
+      forgetTeamState();
+      state.fileSha = null;
+      state.loadedThisSession = false;
+      setBase(null);
       cacheDataLocally();
       render();
       return true;
@@ -456,7 +485,7 @@
   }
   // Three-way merge by record id. `base` = last synced copy (may be null).
   function mergeRecords(base, local, remote) {
-    const key = (x) => JSON.stringify(x);
+    const key = (x) => JSON.stringify(stripTag(x));
     const bMap = new Map((base || []).map((r) => [r.id, r]));
     const lMap = new Map((local || []).map((r) => [r.id, r]));
     const rMap = new Map((remote || []).map((r) => [r.id, r]));
@@ -488,7 +517,8 @@
     const merged = Object.assign({}, remote, local, { projects: p.list, tasks: t.list });
     const bs = base && base.settings ? JSON.stringify(base.settings) : null;
     const settingsLocalChanged = bs === null || JSON.stringify(local.settings) !== bs;
-    merged.settings = settingsLocalChanged && bs !== null ? local.settings : remote.settings || local.settings;
+    // Without a base we cannot tell who changed what; the settings in my own browser are mine, keep them.
+    merged.settings = bs === null ? local.settings || remote.settings : settingsLocalChanged ? local.settings : remote.settings || local.settings;
     // Letter numbering must never go backwards: take the higher sequence.
     const ls = local.settings || {}, rs = remote.settings || {};
     if (ls.scfYear === rs.scfYear) merged.settings = Object.assign({}, merged.settings, { scfSeq: Math.max(ls.scfSeq || 1, rs.scfSeq || 1) });
@@ -1613,7 +1643,8 @@
       backupCurrentData();
       state.fileSha = meta.sha;
       state.data = loaded;
-      state.baseData = JSON.parse(JSON.stringify(loaded));
+      setBase(loaded);
+      forgetTeamState();
       state.loadedThisSession = true;
       cacheDataLocally();
       setDirty(false);
@@ -1640,11 +1671,14 @@
       if (!r.ok) return false;
       const meta = await r.json();
       const remote = normalizeData(JSON.parse(await readRemoteText(meta)));
+      // Without a known base a silent merge could undo deletions; let the user decide.
+      if (!state.baseData) return false;
       const { data, conflicts } = mergeData(state.baseData, state.data, remote);
       if (conflicts) return false;
       backupCurrentData();
       state.data = normalizeData(data);
       state.fileSha = meta.sha;
+      setBase(remote);
       state.loadedThisSession = true;
       cacheDataLocally();
       render();
@@ -1664,7 +1698,7 @@
       return false;
     }
     if (holdsTeamData()) {
-      toast("This browser holds the team-wide leader view. Unlock the leader view, or Load your own data first, before saving.", "error");
+      toast("This browser holds the team-wide leader view. Unlock the leader view and click Load, or Load your own data, before saving.", "error");
       return false;
     }
     setSyncBusy("save");
@@ -1747,16 +1781,17 @@
               const meta = await r.json();
               const remote = normalizeData(JSON.parse(await readRemoteText(meta)));
               const { data, conflicts } = mergeData(state.baseData, state.data, remote);
-              if (
-                conflicts &&
-                !window.confirm(
-                  conflicts + " record(s) were edited by both you and someone else; the most recently updated version of each will be kept. Continue?"
-                )
-              )
-                return;
+              const question = !state.baseData
+                ? "This browser doesn't know which version you last synced, so records deleted on either side may come back. A backup of your current data is kept. Merge anyway?"
+                : conflicts
+                ? conflicts + " record(s) were edited by both you and someone else; the most recently updated version of each will be kept. Continue?"
+                : null;
+              // Throwing keeps the toast (and its button) on screen so the user can retry.
+              if (question && !window.confirm(question)) throw new Error("Merge cancelled — nothing was changed.");
               backupCurrentData();
               state.data = normalizeData(data);
               state.fileSha = meta.sha;
+              setBase(remote);
               state.loadedThisSession = true;
               cacheDataLocally();
               render();
@@ -1772,7 +1807,7 @@
       }
       const result = await putRes.json();
       state.fileSha = result.content && result.content.sha;
-      state.baseData = JSON.parse(JSON.stringify(state.data));
+      setBase(dataForRepo());
       cacheDataLocally();
       setDirty(false);
       markLastSync("Save");
@@ -1846,8 +1881,10 @@
     if (!isLeader() || !state.engFilter || state.engFilter === "all") return true;
     return (r._eng || myEngineerId()) === state.engFilter;
   }
-  function newRecordTag() {
+  function newRecordTag(projectId) {
     if (!isLeader()) return {};
+    const proj = projectId ? getProject(projectId) : null;
+    if (proj) return { _eng: proj._eng || myEngineerId() };
     return { _eng: state.engFilter && state.engFilter !== "all" ? state.engFilter : myEngineerId() };
   }
   function repoFileUrl(repo, path) {
@@ -2056,6 +2093,7 @@
       sessionStorage.removeItem(LS_LEADER);
     } catch (_) {}
     state.engFilter = "all";
+    forgetTeamState();
     updateLeaderUi();
     render();
     toast("Leader view locked. Load your own data before saving.", "success");
@@ -2105,7 +2143,8 @@
       for (const id of ids) {
         const f = await ghReadFile(engineerRepo(id), DATA_PATH);
         if (id === myEngineerId()) {
-          const json = f ? JSON.parse(f.text) : {};
+          // No file of my own yet: keep the settings in this browser rather than resetting to SAMPLE defaults.
+          const json = f ? JSON.parse(f.text) : { settings: state.data.settings };
           await overlaySharedSettings(json);
           mine = normalizeData(json);
         }
@@ -2119,11 +2158,29 @@
         d.projects.forEach((p) => projects.push(Object.assign({}, p, { _eng: id })));
         d.tasks.forEach((t) => tasks.push(Object.assign({}, t, { _eng: id })));
       }
+      // Record ids must be unique across the team, or edits/deletes could hit the wrong engineer's record.
+      const dupes = [projects, tasks].map((list) => {
+        const seen = new Map();
+        const d = new Set();
+        list.forEach((r) => {
+          if (seen.has(r.id) && seen.get(r.id) !== r._eng) d.add(r.id);
+          seen.set(r.id, r._eng);
+        });
+        return d.size;
+      });
+      if (dupes[0] || dupes[1]) {
+        toast(
+          "Load stopped: " + (dupes[0] + dupes[1]) + " record id(s) exist in more than one engineer's repo (usually from a shared old file). Remove the duplicates from one repo first — nothing was changed.",
+          "error"
+        );
+        return false;
+      }
       backupCurrentData();
       state.data = Object.assign({}, mine || normalizeData({}), { projects, tasks });
       if (bases[myEngineerId()] && bases[myEngineerId()].sha) syncOwnMarkers(bases[myEngineerId()].sha, mine);
       state.bases = bases;
       state.engSettings = engSettings;
+      state.teamLoaded = true;
       state.loadedThisSession = true;
       cacheDataLocally();
       setDirty(false);
@@ -2142,11 +2199,19 @@
   // Engineer mode and leader mode must agree on which version of my own file was last synced.
   function syncOwnMarkers(sha, data) {
     state.fileSha = sha;
-    state.baseData = JSON.parse(JSON.stringify(data));
+    setBase(Object.assign({}, data, { projects: (data.projects || []).map(stripTag), tasks: (data.tasks || []).map(stripTag) }));
     state.loadedThisSession = true;
     try {
       localStorage.setItem(LS_SHA, sha);
     } catch (_) {}
+  }
+  // An engineer's own settings (name, ECSA no, letter sequence) are never replaced by the leader's.
+  function settingsFor(id) {
+    if (id === myEngineerId()) return state.data.settings;
+    if (state.engSettings[id]) return state.engSettings[id];
+    const shared = {};
+    SHARED_KEYS.forEach((k) => (shared[k] = (state.data.settings || {})[k]));
+    return normalizeData({ settings: shared }).settings;
   }
   function engineerSlice(id) {
     const me = myEngineerId();
@@ -2154,7 +2219,7 @@
     return {
       version: APP_VERSION,
       updatedAt: null,
-      settings: id === me ? state.data.settings : state.engSettings[id] || state.data.settings,
+      settings: settingsFor(id),
       projects: (state.data.projects || []).filter(own).map(stripTag),
       tasks: (state.data.tasks || []).filter(own).map(stripTag),
     };
@@ -2164,6 +2229,13 @@
     let slice = engineerSlice(id);
     const base = (state.bases && state.bases[id]) || { sha: null, snapshot: null };
     if (base.snapshot ? cmp(slice) === cmp(base.snapshot) : !slice.projects.length && !slice.tasks.length) return "unchanged";
+    const before = base.snapshot ? base.snapshot.projects.length + base.snapshot.tasks.length : 0;
+    if (before && !slice.projects.length && !slice.tasks.length) {
+      const ok = window.confirm(
+        "Saving would remove ALL " + before + " projects and tasks from " + id + "'s repo. Continue only if you really deleted everything of theirs."
+      );
+      if (!ok) return "skipped";
+    }
     let sha = base.sha;
     for (let attempt = 0; attempt < 2; attempt++) {
       slice.updatedAt = nowIso();
@@ -2177,12 +2249,17 @@
       const remote = f ? normalizeData(JSON.parse(f.text)) : normalizeData({});
       const merged = mergeData(base.snapshot, slice, remote).data;
       const me = myEngineerId();
+      // Another engineer's settings are theirs: take the newest from GitHub. Mine follow the merge.
+      if (id === me) state.data.settings = merged.settings;
+      else if (f) state.engSettings[id] = remote.settings;
       const tag = (r) => Object.assign({}, r, { _eng: id });
       state.data.projects = (state.data.projects || []).filter((r) => (r._eng || me) !== id).concat(merged.projects.map(tag));
       state.data.tasks = (state.data.tasks || []).filter((r) => (r._eng || me) !== id).concat(merged.tasks.map(tag));
       slice = engineerSlice(id);
       sha = f && f.sha;
       base.snapshot = f ? JSON.parse(JSON.stringify(remote)) : null;
+      base.sha = sha;
+      state.bases[id] = base;
     }
     return "conflict";
   }
@@ -2195,6 +2272,10 @@
       toast("Sync already in progress.", "error");
       return false;
     }
+    if (!state.teamLoaded) {
+      toast("Click Load first: the leader view must read every engineer's repo in this session before it can save.", "error");
+      return false;
+    }
     setSyncBusy("save");
     try {
       const ids = new Set(Object.keys(state.bases || {}));
@@ -2202,15 +2283,22 @@
       (state.data.projects || []).concat(state.data.tasks || []).forEach((r) => ids.add(r._eng || myEngineerId()));
       let saved = 0;
       const conflicted = [];
+      const skipped = [];
       for (const id of ids) {
         const r = await saveEngineerFile(id);
         if (r === "saved") saved++;
         else if (r === "conflict") conflicted.push(id);
+        else if (r === "skipped") skipped.push(id);
       }
       await pushSharedSettings();
       cacheDataLocally();
-      if (conflicted.length) {
-        toast("Saved " + saved + " repo(s), but " + conflicted.join(", ") + " changed again during save. Click Save once more.", "error");
+      if (conflicted.length || skipped.length) {
+        toast(
+          "Saved " + saved + " repo(s)." +
+            (conflicted.length ? " " + conflicted.join(", ") + " changed again during save — click Save once more." : "") +
+            (skipped.length ? " Not saved (you cancelled): " + skipped.join(", ") + "." : ""),
+          "error"
+        );
         return false;
       }
       setDirty(false);
@@ -2292,7 +2380,8 @@
         // Imported data is not what GitHub holds: force the "remote differs" check on next Save.
         state.fileSha = null;
         state.loadedThisSession = false;
-        state.baseData = null;
+        setBase(null);
+        forgetTeamState();
         cacheDataLocally();
         state.view = "dashboard";
         state.selectedProjectId = null;
@@ -4583,6 +4672,10 @@
       };
     }
     document.getElementById("set-save").onclick = () => {
+      if (!s.engineerIdLocked && slugifyId(document.getElementById("set-eng-id").value) === "shared") {
+        toast('"shared" is reserved for the team repo. Choose another Engineer ID.', "error");
+        return;
+      }
       const nextStatuses = [];
       box.querySelectorAll(".dyn-row").forEach((row) => {
         const name = row.querySelector(".st-name").value.trim();
@@ -4621,7 +4714,7 @@
       if (ownerNext !== state.settings.owner || repoNext !== state.settings.repo) {
         state.fileSha = null;
         state.loadedThisSession = false;
-        state.baseData = null;
+        setBase(null);
       }
       state.settings.owner = ownerNext;
       state.settings.repo = repoNext;
@@ -5208,13 +5301,15 @@
 
       if (isEdit) {
         Object.assign(t, payload);
+        // Moving a task onto another engineer's project moves it into that engineer's repo.
+        if (isLeader() && payload.projectId) Object.assign(t, newRecordTag(payload.projectId));
       } else {
         state.data.tasks.push(
           normalizeTask({
             id: uid("task"),
             createdAt: nowIso(),
             ...payload,
-            ...newRecordTag(),
+            ...newRecordTag(payload.projectId),
           })
         );
       }
