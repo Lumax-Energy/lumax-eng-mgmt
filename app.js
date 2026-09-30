@@ -11,6 +11,9 @@
   const LS_SETTINGS = "lumax-eng-mgmt-settings";
   const LS_UI = "lumax-eng-mgmt-ui";
   const LS_SHA = "lumax-eng-mgmt-sha";
+  const LS_DIRTY = "lumax-eng-mgmt-dirty";
+  const LS_BACKUP = "lumax-eng-mgmt-backup";
+  const LS_LEADER = "lumax-eng-mgmt-leader-unlocked";
   const DEFAULT_OWNER = "Lumax-Energy";
   const DEFAULT_REPO = "lumax-eng-mgmt";
   const DATA_PATH = "data/projects.json";
@@ -170,8 +173,6 @@
     { id: "coordination", name: "Coordination" },
     { id: "other", name: "Other" },
   ];
-  /** @deprecated use getTaskTypes() — kept as alias for any leftover refs during load */
-  const TASK_TYPES = DEFAULT_TASK_TYPES;
 
   const V1_STATUS_MAP = {
     todo: "status-todo",
@@ -193,6 +194,9 @@
     settings: loadBrowserSettings(),
     githubUser: null,
     fileSha: localStorage.getItem(LS_SHA) || null,
+    engFilter: "all",
+    bases: {},
+    engSettings: {},
     loadedThisSession: false,
     syncOp: null,
   };
@@ -218,11 +222,40 @@
   }
 
   // ---------- Utils ----------
+  // Keep fields this version doesn't model so an older client can't silently drop newer data.
+  function extraFields(src, known, skip) {
+    const out = {};
+    Object.keys(src || {}).forEach((k) => {
+      if (k === "__proto__" || k === "constructor" || k === "prototype") return;
+      if (Object.prototype.hasOwnProperty.call(known, k) || (skip && skip.includes(k))) return;
+      out[k] = src[k];
+    });
+    return out;
+  }
+  // Ids come from JSON files anyone with repo access can edit; keep them inert.
+  function safeId(v) {
+    return String(v == null ? "" : v).replace(/[^\w.:-]/g, "_");
+  }
   function uid(prefix) {
     return prefix + "-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
   }
   function nowIso() {
     return new Date().toISOString();
+  }
+  // Calendar date (YYYY-MM-DD) of an instant in the business timezone, so UI, letters and due dates agree.
+  function sastDate(v) {
+    const d = v instanceof Date ? v : new Date(v || Date.now());
+    if (isNaN(d)) return "";
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Johannesburg",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(d);
+    } catch (_) {
+      return d.toISOString().slice(0, 10);
+    }
   }
   function todayStr() {
     try {
@@ -304,10 +337,14 @@
           owner: s.owner || DEFAULT_OWNER,
           repo: s.repo || DEFAULT_REPO,
           pat: s.pat || "",
+          engineerId: s.engineerId || "",
+          engineerIdLocked: !!s.engineerIdLocked,
+          role: s.role === "leader" ? "leader" : "engineer",
+          sharedRepo: s.sharedRepo || "",
         };
       }
     } catch (_) {}
-    return { owner: DEFAULT_OWNER, repo: DEFAULT_REPO, pat: "" };
+    return { owner: DEFAULT_OWNER, repo: DEFAULT_REPO, pat: "", engineerId: "", engineerIdLocked: false, role: "engineer", sharedRepo: "" };
   }
   function saveBrowserSettings() {
     localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
@@ -348,13 +385,128 @@
       { hideCompleted: hide }
     );
   }
+  let cacheWarned = false;
+  // Any local cache write is an edit until a Load/Save/Import marks it clean.
+  let dirty = (function () {
+    try {
+      return localStorage.getItem(LS_DIRTY) === "1";
+    } catch (_) {
+      return false;
+    }
+  })();
+  function setDirty(v) {
+    dirty = !!v;
+    try {
+      localStorage.setItem(LS_DIRTY, dirty ? "1" : "0");
+    } catch (_) {}
+    const b = document.getElementById("btn-save");
+    if (b) b.classList.toggle("unsaved", dirty);
+  }
   function cacheDataLocally() {
     try {
       localStorage.setItem(LS_DATA, JSON.stringify(state.data));
       if (state.fileSha) localStorage.setItem(LS_SHA, state.fileSha);
     } catch (e) {
       console.warn("localStorage cache failed", e);
+      if (!cacheWarned) {
+        cacheWarned = true;
+        toast("Browser storage is full or blocked — changes are NOT cached locally. Save to GitHub or use Backup now.", "error");
+      }
     }
+    setDirty(true);
+  }
+  // Keep a copy of the current data before anything replaces it wholesale.
+  function backupCurrentData() {
+    try {
+      localStorage.setItem(LS_BACKUP, JSON.stringify({ at: new Date().toISOString(), data: state.data }));
+    } catch (e) {
+      console.warn("backup failed", e);
+    }
+  }
+  function restoreBackup() {
+    try {
+      const b = JSON.parse(localStorage.getItem(LS_BACKUP) || "null");
+      if (!b || !b.data) return false;
+      state.data = normalizeData(b.data);
+      cacheDataLocally();
+      render();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  window.addEventListener("beforeunload", (e) => {
+    if (dirty) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+  function utf8FromBase64(b64) {
+    const bin = atob(String(b64 || "").replace(/\s/g, ""));
+    return new TextDecoder("utf-8").decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+  }
+  // Contents API omits `content` for files over 1 MB; re-request the raw body.
+  async function readRemoteText(meta, repo, path) {
+    if (meta && meta.content) return utf8FromBase64(meta.content);
+    const res = await fetch((repo ? repoFileUrl(repo, path) : contentsUrl()) + "?ref=main", {
+      headers: Object.assign(ghHeaders(), { Accept: "application/vnd.github.raw+json" }),
+    });
+    if (!res.ok) throw new Error("Could not read file body (" + res.status + ")");
+    return res.text();
+  }
+  // Three-way merge by record id. `base` = last synced copy (may be null).
+  function mergeRecords(base, local, remote) {
+    const key = (x) => JSON.stringify(x);
+    const bMap = new Map((base || []).map((r) => [r.id, r]));
+    const lMap = new Map((local || []).map((r) => [r.id, r]));
+    const rMap = new Map((remote || []).map((r) => [r.id, r]));
+    const out = [];
+    let conflicts = 0;
+    const ids = new Set([...lMap.keys(), ...rMap.keys()]);
+    ids.forEach((id) => {
+      const b = bMap.get(id), l = lMap.get(id), r = rMap.get(id);
+      if (l && r) {
+        const lChanged = !b || key(l) !== key(b);
+        const rChanged = !b || key(r) !== key(b);
+        if (lChanged && rChanged && key(l) !== key(r)) {
+          conflicts++;
+          out.push(String(l.updatedAt || "") >= String(r.updatedAt || "") ? l : r);
+        } else out.push(lChanged ? l : r);
+      } else if (l && !r) {
+        // gone remotely: keep if we edited it or never had a base to compare
+        if (!b || key(l) !== key(b)) out.push(l);
+      } else if (r && !l) {
+        // deleted locally: honour it only if remote did not change it since base
+        if (!b || key(r) !== key(b)) out.push(r);
+      }
+    });
+    return { list: out, conflicts };
+  }
+  function mergeData(base, local, remote) {
+    const p = mergeRecords(base && base.projects, local.projects, remote.projects);
+    const t = mergeRecords(base && base.tasks, local.tasks, remote.tasks);
+    const merged = Object.assign({}, remote, local, { projects: p.list, tasks: t.list });
+    const bs = base && base.settings ? JSON.stringify(base.settings) : null;
+    const settingsLocalChanged = bs === null || JSON.stringify(local.settings) !== bs;
+    merged.settings = settingsLocalChanged && bs !== null ? local.settings : remote.settings || local.settings;
+    // Letter numbering must never go backwards: take the higher sequence.
+    const ls = local.settings || {}, rs = remote.settings || {};
+    if (ls.scfYear === rs.scfYear) merged.settings = Object.assign({}, merged.settings, { scfSeq: Math.max(ls.scfSeq || 1, rs.scfSeq || 1) });
+    return { data: merged, conflicts: p.conflicts + t.conflicts };
+  }
+  function undoAction() {
+    return {
+      label: "Undo",
+      onClick: async () => {
+        if (!restoreBackup()) throw new Error("No backup available.");
+      },
+    };
+  }
+  function confirmDiscardUnsaved(what) {
+    if (!dirty) return true;
+    return window.confirm(
+      "You have unsaved changes. " + what + " will replace them (a backup copy is kept in this browser). Continue?"
+    );
   }
   function loadCachedData() {
     try {
@@ -415,9 +567,20 @@
   function bindMarkDoneButtons(root) {
     if (!root) return;
     root.querySelectorAll(".btn-mark-done").forEach((btn) => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = "1";
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        // Inside the task form: only fill the fields so unsaved edits are not thrown away.
+        const stSel = btn.closest("#overlay") && document.getElementById("tf-status");
+        if (stSel) {
+          stSel.value = doneStatusId();
+          const dd = document.getElementById("tf-done");
+          if (dd && !dd.value) dd.value = todayStr();
+          toast("Status set to Done — click Save to keep it.", "success");
+          return;
+        }
         const t = getTask(btn.dataset.markDone);
         if (!t) return;
         markTaskDone(t);
@@ -466,8 +629,7 @@
       code === "DEMO-001" ||
       code.startsWith("DEMO-") ||
       client === "Demo Client" ||
-      client === "Demo" ||
-      client.startsWith("Demo ")
+      client === "Demo"
     );
   }
   function isOverdue(task) {
@@ -476,27 +638,33 @@
   }
   function isDueWithin(task, days) {
     if (!task.dueDate || statusIsDone(task.statusId)) return false;
-    const d = new Date(task.dueDate + "T00:00:00");
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const end = new Date(now);
-    end.setDate(end.getDate() + days);
-    return d >= now && d <= end;
+    const day = 86400000;
+    const d = Date.parse(task.dueDate + "T00:00:00Z");
+    const now = Date.parse(todayStr() + "T00:00:00Z");
+    return d >= now && d <= now + days * day;
   }
   function projectTasks(projectId) {
     return (state.data.tasks || []).filter((t) => t.projectId === projectId);
   }
-  function allTasksFiltered() {
-    return (state.data.tasks || []).filter((t) => taskPassesTaskFilters(t));
+  function allTasksFiltered(opts) {
+    return (state.data.tasks || []).filter((t) => taskPassesTaskFilters(t, opts));
+  }
+  // Tasks of archived projects stay in the data but not in headline counts.
+  function isLiveTask(t) {
+    const p = t && t.projectId ? getProject(t.projectId) : null;
+    return inScope(t) && !(p && p.archived);
   }
 
   function taskPassesTaskFilters(t, opts) {
     opts = opts || {};
     const q = (state.search || "").trim().toLowerCase();
     const f = state.taskFilters;
+    if (!inScope(t)) return false;
     if (f.type && t.type !== f.type) return false;
     if (f.statusId && t.statusId !== f.statusId) return false;
-    if (f.assignee && (t.assignee || "").toLowerCase() !== f.assignee.toLowerCase()) return false;
+    if (f.assignee === "__unassigned__") {
+      if ((t.assignee || "").trim()) return false;
+    } else if (f.assignee && (t.assignee || "").toLowerCase() !== f.assignee.toLowerCase()) return false;
     if (f.projectId === "__standalone__" && t.projectId) return false;
     if (f.projectId && f.projectId !== "__standalone__" && t.projectId !== f.projectId) return false;
     if (f.client) {
@@ -602,7 +770,7 @@
     const st = getStatus(t.statusId);
     return (
       `<tr class="${isOverdue(t) ? "overdue" : ""}" data-task="${escapeHtml(t.id)}">` +
-      `<td><span class="type-chip">${escapeHtml(typeLabel(t.type))}</span></td>` +
+      `<td><span class="type-chip">${escapeHtml(typeLabel(t.type))}</span>${isLeader() && t._eng ? ` <span class="pill">${escapeHtml(t._eng)}</span>` : ""}</td>` +
       `<td>${escapeHtml(t.title)}</td>` +
       `<td>${escapeHtml(p ? p.projectCode || p.projectName : "—")}</td>` +
       `<td>${escapeHtml(st ? st.name : t.statusId)}</td>` +
@@ -838,10 +1006,10 @@
     return { light: "amber", note: "" };
   }
   function execDashboardKpis() {
-    const projects = (state.data.projects || []).filter((p) => !p.archived);
+    const projects = (state.data.projects || []).filter((p) => inScope(p) && !p.archived);
     const tasks = state.data.tasks || [];
     const openProjects = projects.length;
-    const overdueTasks = tasks.filter((t) => isOverdue(t)).length;
+    const overdueTasks = tasks.filter((t) => isLiveTask(t) && isOverdue(t)).length;
     const ready = projects.filter((p) => isScfReady(p)).length;
     const issued = projects.filter((p) => isScfIssued(p)).length;
     const gaps = projects.filter((p) => missingCommercialFields(p).length > 0).length;
@@ -907,12 +1075,10 @@
     }
     static issueDateParts(d) {
       const dt = d instanceof Date ? d : new Date(d || Date.now());
-      const yyyy = dt.getFullYear();
-      const dd = String(dt.getDate()).padStart(2, "0");
-      const mm = String(dt.getMonth() + 1).padStart(2, "0");
-      return { iso: dt.toISOString(), dateLabel: dd + "/" + mm + "/" + yyyy, year: yyyy };
+      const [yyyy, mm, dd] = sastDate(dt).split("-");
+      return { iso: dt.toISOString(), dateLabel: dd + "/" + mm + "/" + yyyy, year: Number(yyyy) };
     }
-    static allocateRef(settings, issueDate) {
+    static allocateRef(settings, issueDate, usedRefs) {
       const s = settings || {};
       const parts = ScfHelper.issueDateParts(issueDate);
       let year = Number(s.scfYear);
@@ -923,6 +1089,9 @@
         year = parts.year;
         seq = 1;
       }
+      // Never hand out a number that already exists (local, voided, or seen on GitHub).
+      const used = usedRefs || new Set();
+      while (used.has(ScfHelper.formatRef(year, seq).toUpperCase())) seq++;
       const ref = ScfHelper.formatRef(year, seq);
       s.scfYear = year;
       s.scfSeq = seq + 1;
@@ -1009,10 +1178,6 @@
       );
     }
   }
-  function nextScfRef() {
-    const settings = state.data.settings || (state.data.settings = {});
-    return ScfHelper.allocateRef(settings, new Date()).ref;
-  }
   /** Display refs as-is (legacy LMX-SCF-* remain readable). */
   function displayConformanceRef(ref) {
     return (ref || "").trim();
@@ -1068,7 +1233,7 @@
     const q = (state.search || "").trim().toLowerCase();
     const clientFilter = (extra && extra.client !== undefined ? extra.client : state.projectFilters.client) || "";
     const viewId = extra && extra.dashboardView !== undefined ? extra.dashboardView : state.dashboardView;
-    let projects = (state.data.projects || []).filter((p) => state.showArchived || !p.archived);
+    let projects = (state.data.projects || []).filter((p) => inScope(p) && (state.showArchived || !p.archived));
     if (clientFilter) {
       projects = projects.filter((p) => (p.clientName || "").toLowerCase() === clientFilter.toLowerCase());
     }
@@ -1119,7 +1284,7 @@
         return hay.includes(q);
       });
     }
-    projects.sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || ""));
+    projects.sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || "", undefined, { numeric: true }));
     return projects;
   }
   function conformanceLabel(status) {
@@ -1137,13 +1302,6 @@
       ? settingsIn.taskStatuses.map(normalizeStatus)
       : DEFAULT_STATUSES.map((s) => ({ ...s }));
 
-    // Ensure core ids exist after v1 upgrade
-    const ids = new Set(taskStatuses.map((s) => s.id));
-    DEFAULT_STATUSES.forEach((d) => {
-      if (!ids.has(d.id)) {
-        // only inject mapped ones if missing aliases
-      }
-    });
 
     const projectTypes =
       Array.isArray(settingsIn.projectTypes) && settingsIn.projectTypes.length
@@ -1172,7 +1330,7 @@
       const seen = new Set();
       taskTypes = [];
       settingsIn.taskTypes.forEach((t) => {
-        const id = String((t && t.id) || "").trim();
+        const id = safeId(String((t && t.id) || "").trim());
         const name = String((t && t.name) || "").trim();
         if (!id || !name || seen.has(id)) return;
         seen.add(id);
@@ -1219,16 +1377,16 @@
 
     // Tasks: v2 unified array, or migrate from nested + standaloneTasks
     if (Array.isArray(json.tasks) && json.tasks.length) {
-      data.tasks = json.tasks.map((t) => normalizeTask(t, version === 1, taskStatuses));
+      data.tasks = json.tasks.map((t) => normalizeTask(t, version === 1, taskStatuses, taskTypes));
     } else {
       const collected = [];
       projectsIn.forEach((p) => {
         (p.tasks || []).forEach((t) => {
-          collected.push(normalizeTask({ ...t, projectId: p.id }, true, taskStatuses));
+          collected.push(normalizeTask({ ...t, projectId: p.id }, true, taskStatuses, taskTypes));
         });
       });
       (json.standaloneTasks || []).forEach((t) => {
-        collected.push(normalizeTask({ ...t, projectId: t.projectId || null }, version === 1, taskStatuses));
+        collected.push(normalizeTask({ ...t, projectId: t.projectId || null }, version === 1, taskStatuses, taskTypes));
       });
       data.tasks = collected;
     }
@@ -1257,7 +1415,7 @@
     const cat = s.category;
     const category = cat === "todo" || cat === "doing" || cat === "done" ? cat : null;
     return {
-      id: s.id || uid("status"),
+      id: s.id ? safeId(s.id) : uid("status"),
       name: s.name || "Status",
       color: s.color || "#6b7c93",
       category,
@@ -1267,7 +1425,7 @@
   function normalizeProject(p, fromV1) {
     let phases;
     if (Array.isArray(p.phases) && p.phases.length) {
-      phases = p.phases.map((ph) => ({ id: ph.id || uid("phase"), name: ph.name || "Phase" }));
+      phases = p.phases.map((ph) => ({ id: ph.id ? safeId(ph.id) : uid("phase"), name: ph.name || "Phase" }));
     } else {
       phases = DEFAULT_PHASES.map((ph) => ({ id: uid("phase"), name: ph.name }));
     }
@@ -1296,7 +1454,7 @@
           p.sclUndoSnapshot.conformanceCert && typeof p.sclUndoSnapshot.conformanceCert === "object"
             ? p.sclUndoSnapshot.conformanceCert
             : null,
-        activePhaseId: p.sclUndoSnapshot.activePhaseId || null,
+        activePhaseId: p.sclUndoSnapshot.activePhaseId ? safeId(p.sclUndoSnapshot.activePhaseId) : null,
       };
     }
     const sclHistory = Array.isArray(p.sclHistory)
@@ -1307,10 +1465,12 @@
             issuedAt: h.issuedAt || null,
             action: h.action || "issued",
             at: h.at || h.issuedAt || null,
+            seq: Number.isFinite(Number(h.seq)) ? Number(h.seq) : undefined,
+            year: Number.isFinite(Number(h.year)) ? Number(h.year) : undefined,
           }))
       : [];
-    return {
-      id: p.id || uid("proj"),
+    const proj = {
+      id: p.id ? safeId(p.id) : uid("proj"),
       clientName: p.clientName || "",
       projectName: p.projectName || "",
       projectCode: p.projectCode || "",
@@ -1337,11 +1497,12 @@
       conformanceCert: p.conformanceCert && typeof p.conformanceCert === "object" ? p.conformanceCert : null,
       sclUndoSnapshot,
       sclHistory,
-      activePhaseId: p.activePhaseId || null,
+      activePhaseId: p.activePhaseId ? safeId(p.activePhaseId) : null,
       archived: !!p.archived,
       createdAt: p.createdAt || nowIso(),
       updatedAt: p.updatedAt || nowIso(),
     };
+    return Object.assign(extraFields(p, proj, ["tasks"]), proj);
   }
 
   function mapLegacyStatus(status, statusList) {
@@ -1353,19 +1514,21 @@
     return byName ? byName.id : "status-todo";
   }
 
-  function normalizeTask(t, fromV1, statusList) {
-    let statusId = t.statusId;
+  function normalizeTask(t, fromV1, statusList, typeList) {
+    let statusId = t.statusId ? safeId(t.statusId) : t.statusId;
     if (!statusId && t.status) statusId = mapLegacyStatus(t.status, statusList);
     if (!statusId) statusId = "status-todo";
 
     let type = t.type || t.typeId || "eng_task";
     if (type === "design-check") type = "design_check";
-    const knownTypes = (state.data && state.data.settings && state.data.settings.taskTypes) || DEFAULT_TASK_TYPES;
+    type = safeId(type);
+    // Validate against the incoming file's types, not whatever is currently loaded.
+    const knownTypes = typeList || (state.data && state.data.settings && state.data.settings.taskTypes) || DEFAULT_TASK_TYPES;
     if (!knownTypes.some((x) => x.id === type) && !DEFAULT_TASK_TYPES.some((x) => x.id === type)) type = "eng_task";
 
     const task = {
-      id: t.id || uid("task"),
-      projectId: t.projectId == null || t.projectId === "" ? null : t.projectId,
+      id: t.id ? safeId(t.id) : uid("task"),
+      projectId: t.projectId == null || t.projectId === "" ? null : safeId(t.projectId),
       title: t.title || "",
       description: t.description || "",
       type,
@@ -1373,7 +1536,7 @@
       assignee: t.assignee || "",
       priority: ["low", "medium", "high"].includes(t.priority) ? t.priority : "medium",
       dueDate: t.dueDate || null,
-      phaseId: t.phaseId || null,
+      phaseId: t.phaseId ? safeId(t.phaseId) : null,
       blockedReason: t.blockedReason || "",
       doneDate: t.doneDate || null,
       // type-specific
@@ -1388,10 +1551,7 @@
       createdAt: t.createdAt || nowIso(),
       updatedAt: t.updatedAt || nowIso(),
     };
-    if (statusIsDone(task.statusId) && !task.doneDate) {
-      // leave null; user can set
-    }
-    return task;
+    return Object.assign(extraFields(t, task, ["status", "typeId"]), task);
   }
 
   // ---------- GitHub API (preserve SHA behaviour) ----------
@@ -1415,7 +1575,7 @@
       return;
     }
     try {
-      const res = await fetch("https://api.github.com/user", { headers: ghHeaders() });
+      const res = await fetch("https://api.github.com/user", { headers: ghHeaders(), cache: "no-store" });
       if (!res.ok) throw new Error("Auth failed (" + res.status + ")");
       state.githubUser = await res.json();
       updateAuthBadge();
@@ -1425,7 +1585,7 @@
       toast("GitHub auth: " + e.message, "error");
     }
   }
-  async function loadFromGithub() {
+  async function loadEngineerData() {
     if (!state.settings.pat) {
       toast("Set a Personal Access Token in Settings first.", "error");
       return false;
@@ -1434,23 +1594,30 @@
       toast("Sync already in progress.", "error");
       return false;
     }
+    if (!confirmDiscardUnsaved("Loading from GitHub")) return false;
     setSyncBusy("load");
     try {
-      const res = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders() });
+      const res = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders(), cache: "no-store" });
       if (res.status === 404) {
         toast("data/projects.json not found on main. Using local/seed data.", "error");
         return false;
       }
       if (!res.ok) throw new Error("Load failed (" + res.status + ")");
       const meta = await res.json();
+      const json = JSON.parse(await readRemoteText(meta));
+      await overlaySharedSettings(json);
+      const loaded = normalizeData(json);
+      backupCurrentData();
       state.fileSha = meta.sha;
-      const json = JSON.parse(atob(meta.content.replace(/\n/g, "")));
-      state.data = normalizeData(json);
+      state.data = loaded;
+      state.baseData = JSON.parse(JSON.stringify(loaded));
       state.loadedThisSession = true;
       cacheDataLocally();
+      setDirty(false);
+      lockEngineerId();
       markLastSync("Load");
       render();
-      toast("Loaded from GitHub (" + state.settings.owner + "/" + state.settings.repo + ")", "success");
+      toast("Loaded from GitHub (" + state.settings.owner + "/" + state.settings.repo + ")", "success", undoAction());
       return true;
     } catch (e) {
       toast("GitHub load error: " + e.message + ". Prefer GitHub Pages or a local static server (CORS).", "error");
@@ -1459,20 +1626,49 @@
       setSyncBusy(null);
     }
   }
-  async function saveToGithub() {
+  async function saveEngineerData() {
+    const r = await saveEngineerDataOnce(false);
+    // A silent merge happened; retry once with the fresh version.
+    return r === "merged" ? saveEngineerDataOnce(true) : r;
+  }
+  async function tryAutoMerge() {
+    try {
+      const r = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders(), cache: "no-store" });
+      if (!r.ok) return false;
+      const meta = await r.json();
+      const remote = normalizeData(JSON.parse(await readRemoteText(meta)));
+      const { data, conflicts } = mergeData(state.baseData, state.data, remote);
+      if (conflicts) return false;
+      backupCurrentData();
+      state.data = normalizeData(data);
+      state.fileSha = meta.sha;
+      state.loadedThisSession = true;
+      cacheDataLocally();
+      render();
+      toast("Merged newer changes from GitHub automatically.", "success");
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  async function saveEngineerDataOnce(skipAutoMerge) {
     if (!state.settings.pat) {
       toast("Set a Personal Access Token in Settings first.", "error");
-      return;
+      return false;
     }
     if (state.syncOp) {
       toast("Sync already in progress.", "error");
-      return;
+      return false;
+    }
+    if (holdsTeamData()) {
+      toast("This browser holds the team-wide leader view. Unlock the leader view, or Load your own data first, before saving.", "error");
+      return false;
     }
     setSyncBusy("save");
     try {
       const shaWasMissing = !state.fileSha;
       if (shaWasMissing) {
-        const getRes = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders() });
+        const getRes = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders(), cache: "no-store" });
         if (getRes.status === 401) {
           throw new Error("PAT invalid or expired. Update in Settings.");
         }
@@ -1490,18 +1686,13 @@
           const meta = await getRes.json();
           const remoteSha = meta.sha;
           if (!state.loadedThisSession && meta.content) {
-            let remoteStr = "";
-            try {
-              remoteStr = decodeURIComponent(escape(atob(meta.content.replace(/\n/g, ""))));
-            } catch (_) {
-              remoteStr = atob(meta.content.replace(/\n/g, ""));
-            }
-            const localStr = JSON.stringify(state.data, null, 2);
+            const remoteStr = utf8FromBase64(meta.content);
+            const localStr = JSON.stringify(dataForRepo(), null, 2);
             if (remoteStr !== localStr) {
               const ok = confirm(
                 "Remote data differs from this browser. Save will overwrite GitHub with what's on screen. Continue?"
               );
-              if (!ok) return;
+              if (!ok) return false;
             }
           }
           state.fileSha = remoteSha;
@@ -1512,7 +1703,7 @@
       state.data.version = APP_VERSION;
       const body = {
         message: "Update engineering projects data",
-        content: btoa(unescape(encodeURIComponent(JSON.stringify(state.data, null, 2)))),
+        content: btoa(unescape(encodeURIComponent(JSON.stringify(dataForRepo(), null, 2)))),
         branch: "main",
       };
       if (state.fileSha) body.sha = state.fileSha;
@@ -1522,6 +1713,9 @@
         headers: ghHeaders(true),
         body: JSON.stringify(body),
       });
+      if (putRes.status === 404) {
+        throw new Error("Repository " + state.settings.owner + "/" + state.settings.repo + " was not found, or the token cannot access it.");
+      }
       if (putRes.status === 401) {
         throw new Error("PAT invalid or expired. Update in Settings.");
       }
@@ -1531,30 +1725,43 @@
         );
       }
       if (putRes.status === 409 || putRes.status === 422) {
+        if (!skipAutoMerge && (await tryAutoMerge())) return "merged";
         const err = await putRes.json().catch(() => ({}));
         const msg = err.message || ("conflict (" + putRes.status + ")");
         const shortSha = (state.fileSha || "").slice(0, 7) || "local";
         toast(
           "Save conflict — GitHub file moved (your SHA " +
             shortSha +
-            "…). Load remote to refresh, then Save again if you still have edits. (" +
+            "…). Merge remote changes with yours, then Save. (" +
             msg +
             ")",
           "error",
           {
-            label: "Load & retry",
+            label: "Merge & retry",
             onClick: async () => {
-              const ok = window.confirm(
-                "Load remote from GitHub? On-screen data will be replaced, then Save will retry with the fresh SHA."
-              );
-              if (!ok) return;
-              const loaded = await loadFromGithub();
-              if (!loaded) throw new Error("Load failed — Save not retried.");
+              const r = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders(), cache: "no-store" });
+              if (!r.ok) throw new Error("Could not fetch remote (" + r.status + ") — nothing changed.");
+              const meta = await r.json();
+              const remote = normalizeData(JSON.parse(await readRemoteText(meta)));
+              const { data, conflicts } = mergeData(state.baseData, state.data, remote);
+              if (
+                conflicts &&
+                !window.confirm(
+                  conflicts + " record(s) were edited by both you and someone else; the most recently updated version of each will be kept. Continue?"
+                )
+              )
+                return;
+              backupCurrentData();
+              state.data = normalizeData(data);
+              state.fileSha = meta.sha;
+              state.loadedThisSession = true;
+              cacheDataLocally();
+              render();
               await saveToGithub();
             },
           }
         );
-        return;
+        return false;
       }
       if (!putRes.ok) {
         const err = await putRes.json().catch(() => ({}));
@@ -1562,14 +1769,498 @@
       }
       const result = await putRes.json();
       state.fileSha = result.content && result.content.sha;
+      state.baseData = JSON.parse(JSON.stringify(state.data));
       cacheDataLocally();
+      setDirty(false);
       markLastSync("Save");
       toast("Saved to GitHub", "success");
+      lockEngineerId();
+      registerEngineer();
+      return true;
     } catch (e) {
       toast("GitHub save error: " + e.message, "error");
+      return false;
     } finally {
       setSyncBusy(null);
     }
+  }
+
+  // ---------- Team: one private repo per engineer + a shared repo ----------
+  const SHARED_TEAM = "team.json";
+  const SHARED_SETTINGS = "settings.json";
+  const SHARED_LETTERS = "letters.json";
+  const SHARED_KEYS = ["taskStatuses", "taskTypes", "projectTypes", "structureTypes"];
+  let leaderUnlocked = (function () {
+    try {
+      return sessionStorage.getItem(LS_LEADER) === "1";
+    } catch (_) {
+      return false;
+    }
+  })();
+  function slugifyId(v) {
+    return String(v || "")
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+  function engineerRepo(id) {
+    return DEFAULT_REPO + "-" + id;
+  }
+  function myEngineerId() {
+    return state.settings.engineerId || "";
+  }
+  function sharedRepoName() {
+    return state.settings.sharedRepo || DEFAULT_REPO + "-shared";
+  }
+  function isLeader() {
+    return state.settings.role === "leader" && leaderUnlocked && !!myEngineerId();
+  }
+  function lockEngineerId() {
+    if (myEngineerId() && !state.settings.engineerIdLocked) {
+      state.settings.engineerIdLocked = true;
+      saveBrowserSettings();
+    }
+  }
+  function stripTag(r) {
+    const c = Object.assign({}, r);
+    delete c._eng;
+    return c;
+  }
+  function dataForRepo() {
+    return Object.assign({}, state.data, {
+      projects: (state.data.projects || []).map(stripTag),
+      tasks: (state.data.tasks || []).map(stripTag),
+    });
+  }
+  function holdsTeamData() {
+    const me = myEngineerId();
+    return (state.data.projects || []).concat(state.data.tasks || []).some((r) => r._eng && r._eng !== me);
+  }
+  // Leader view: which engineer's work is on screen ("all" or an engineer id).
+  function inScope(r) {
+    if (!isLeader() || !state.engFilter || state.engFilter === "all") return true;
+    return (r._eng || myEngineerId()) === state.engFilter;
+  }
+  function newRecordTag() {
+    if (!isLeader()) return {};
+    return { _eng: state.engFilter && state.engFilter !== "all" ? state.engFilter : myEngineerId() };
+  }
+  function repoFileUrl(repo, path) {
+    return (
+      "https://api.github.com/repos/" +
+      encodeURIComponent(state.settings.owner) +
+      "/" +
+      encodeURIComponent(repo) +
+      "/contents/" +
+      path.split("/").map(encodeURIComponent).join("/")
+    );
+  }
+  async function ghReadFile(repo, path) {
+    const r = await fetch(repoFileUrl(repo, path) + "?ref=main", { headers: ghHeaders(), cache: "no-store" });
+    if (r.status === 404) return null;
+    if (r.status === 401 || r.status === 403) throw new Error("Token rejected for " + repo + " (need Contents read/write).");
+    if (!r.ok) throw new Error(repo + "/" + path + ": read failed (" + r.status + ")");
+    const meta = await r.json();
+    return { sha: meta.sha, text: await readRemoteText(meta, repo, path) };
+  }
+  async function ghWriteFile(repo, path, text, sha, message) {
+    const body = { message, content: btoa(unescape(encodeURIComponent(text))), branch: "main" };
+    if (sha) body.sha = sha;
+    const r = await fetch(repoFileUrl(repo, path), { method: "PUT", headers: ghHeaders(true), body: JSON.stringify(body) });
+    if (r.status === 409 || r.status === 422) return { conflict: true };
+    if (r.status === 404) throw new Error("Repository " + state.settings.owner + "/" + repo + " not found, or the token cannot access it.");
+    if (r.status === 401 || r.status === 403) throw new Error("Token rejected for " + repo + " (need Contents read/write).");
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.message || "write failed (" + r.status + ")");
+    }
+    const j = await r.json();
+    return { sha: j.content && j.content.sha };
+  }
+  // Read-modify-write a small shared JSON file, retrying on conflicts. `mutate` returns undefined for "no change".
+  async function ghUpdateJson(repo, path, mutate, message) {
+    for (let i = 0; i < 4; i++) {
+      const cur = await ghReadFile(repo, path);
+      const obj = cur ? JSON.parse(cur.text) : null;
+      const next = mutate(obj);
+      if (next === undefined) return obj;
+      const res = await ghWriteFile(repo, path, JSON.stringify(next, null, 2), cur && cur.sha, message);
+      if (!res.conflict) return next;
+    }
+    throw new Error("Could not update " + path + " (repeated conflicts). Try again.");
+  }
+  async function sha256Hex(str) {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+  async function loadTeam() {
+    const f = await ghReadFile(sharedRepoName(), SHARED_TEAM);
+    return f ? JSON.parse(f.text) : null;
+  }
+  // After an engineer's first successful save, list them in the shared team file (best effort).
+  async function registerEngineer() {
+    const id = myEngineerId();
+    if (!id || !state.settings.pat) return;
+    try {
+      await ghUpdateJson(
+        sharedRepoName(),
+        SHARED_TEAM,
+        (t) => {
+          t = t && typeof t === "object" ? t : {};
+          t.engineers = Array.isArray(t.engineers) ? t.engineers : [];
+          const name = getEngineerDefaults().name || id;
+          const ex = t.engineers.find((e) => e.id === id);
+          if (ex && ex.name === name) return undefined;
+          if (ex) ex.name = name;
+          else t.engineers.push({ id, name });
+          return t;
+        },
+        "Register engineer " + id
+      );
+    } catch (e) {
+      console.warn("registerEngineer failed", e);
+    }
+  }
+  // Shared lists (statuses, task/project/structure types) live in the shared repo so the team stays consistent.
+  async function overlaySharedSettings(json) {
+    if (!myEngineerId() || !state.settings.pat) return;
+    try {
+      const f = await ghReadFile(sharedRepoName(), SHARED_SETTINGS);
+      if (!f) return;
+      const sh = JSON.parse(f.text);
+      json.settings = json.settings && typeof json.settings === "object" ? json.settings : {};
+      SHARED_KEYS.forEach((k) => {
+        if (Array.isArray(sh[k]) && sh[k].length) json.settings[k] = sh[k];
+      });
+    } catch (e) {
+      toast("Could not read shared settings (" + e.message + ") — using your saved copy.", "error");
+    }
+  }
+  async function pushSharedSettings() {
+    if (!isLeader()) return;
+    const st = state.data.settings || {};
+    await ghUpdateJson(
+      sharedRepoName(),
+      SHARED_SETTINGS,
+      (cur) => {
+        const next = { updatedAt: nowIso(), by: myEngineerId() };
+        SHARED_KEYS.forEach((k) => (next[k] = st[k]));
+        const a = JSON.stringify(SHARED_KEYS.map((k) => (cur || {})[k]));
+        const b = JSON.stringify(SHARED_KEYS.map((k) => next[k]));
+        return a === b ? undefined : next;
+      },
+      "Update shared settings"
+    );
+  }
+  function askPassword(title, hint, needConfirm) {
+    return new Promise((resolve) => {
+      showOverlay(
+        `<div class="panel" role="dialog"><h2>${escapeHtml(title)}</h2>` +
+          (hint ? `<p class="hint">${escapeHtml(hint)}</p>` : "") +
+          `<div class="form-group"><label>Password</label><input id="pw-1" type="password" autocomplete="off" /></div>` +
+          (needConfirm ? `<div class="form-group"><label>Repeat password</label><input id="pw-2" type="password" autocomplete="off" /></div>` : "") +
+          `<div class="panel-actions"><button type="button" class="btn btn-secondary" id="pw-cancel">Cancel</button><button type="button" class="btn" id="pw-ok">OK</button></div></div>`
+      );
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        overlayCloseHook = null;
+        closeOverlay();
+        resolve(v);
+      };
+      overlayCloseHook = () => finish(null);
+      const ok = () => {
+        const a = document.getElementById("pw-1").value;
+        if (!a) return;
+        if (needConfirm && a !== document.getElementById("pw-2").value) {
+          toast("Passwords do not match.", "error");
+          return;
+        }
+        finish(a);
+      };
+      document.getElementById("pw-ok").onclick = ok;
+      document.getElementById("pw-cancel").onclick = () => finish(null);
+      document.getElementById("pw-1").onkeydown = (e) => {
+        if (e.key === "Enter") ok();
+      };
+    });
+  }
+  // Soft lock only: it keeps engineers out of the leader view but is not strong security.
+  async function unlockLeader() {
+    if (!state.settings.pat || !myEngineerId()) {
+      toast("Set the token and your Engineer ID in Settings first.", "error");
+      return false;
+    }
+    let team;
+    try {
+      team = await loadTeam();
+    } catch (e) {
+      toast(e.message, "error");
+      return false;
+    }
+    if (!team || !team.pw) {
+      if (team && team.leader && team.leader !== myEngineerId()) {
+        toast("A different leader (" + team.leader + ") is already set up.", "error");
+        return false;
+      }
+      const pw = await askPassword("Create leader password", "This soft lock keeps engineers out of the leader view. It is not strong security.", true);
+      if (!pw) return false;
+      try {
+        const salt = uid("salt");
+        const hash = await sha256Hex(salt + pw);
+        await ghUpdateJson(
+          sharedRepoName(),
+          SHARED_TEAM,
+          (t) => {
+            t = t && typeof t === "object" ? t : {};
+            t.engineers = Array.isArray(t.engineers) ? t.engineers : [];
+            t.leader = myEngineerId();
+            t.pw = { salt, hash };
+            return t;
+          },
+          "Set leader password"
+        );
+      } catch (e) {
+        toast(e.message, "error");
+        return false;
+      }
+    } else {
+      if (team.leader && team.leader !== myEngineerId()) {
+        toast("Only the team leader (" + team.leader + ") can unlock this view.", "error");
+        return false;
+      }
+      const pw = await askPassword("Leader password", "", false);
+      if (pw == null) return false;
+      if ((await sha256Hex(team.pw.salt + pw)) !== team.pw.hash) {
+        toast("Wrong password.", "error");
+        return false;
+      }
+    }
+    leaderUnlocked = true;
+    try {
+      sessionStorage.setItem(LS_LEADER, "1");
+    } catch (_) {}
+    updateLeaderUi();
+    toast("Leader view unlocked. Click Load to read every engineer's repo.", "success");
+    return true;
+  }
+  function lockLeader() {
+    leaderUnlocked = false;
+    try {
+      sessionStorage.removeItem(LS_LEADER);
+    } catch (_) {}
+    state.engFilter = "all";
+    updateLeaderUi();
+    render();
+    toast("Leader view locked. Load your own data before saving.", "success");
+  }
+  function updateLeaderUi() {
+    const btn = document.getElementById("btn-leader");
+    const sel = document.getElementById("eng-filter");
+    const isLeaderRole = state.settings.role === "leader" && !!myEngineerId();
+    if (btn) {
+      btn.classList.toggle("hidden", !isLeaderRole);
+      btn.textContent = leaderUnlocked ? "Lock leader view" : "Unlock leader view";
+    }
+    if (sel) {
+      const show = isLeader();
+      sel.classList.toggle("hidden", !show);
+      if (show) {
+        const ids = new Set([myEngineerId()]);
+        Object.keys(state.bases || {}).forEach((i) => ids.add(i));
+        (state.data.projects || []).concat(state.data.tasks || []).forEach((r) => r._eng && ids.add(r._eng));
+        sel.innerHTML =
+          `<option value="all">All engineers</option>` +
+          [...ids].sort().map((i) => `<option value="${escapeHtml(i)}"${state.engFilter === i ? " selected" : ""}>${escapeHtml(i)}</option>`).join("");
+        sel.value = state.engFilter || "all";
+      }
+    }
+  }
+  async function loadAllFromGithub() {
+    if (!state.settings.pat) {
+      toast("Set a Personal Access Token in Settings first.", "error");
+      return false;
+    }
+    if (state.syncOp) {
+      toast("Sync already in progress.", "error");
+      return false;
+    }
+    if (!confirmDiscardUnsaved("Loading every engineer's data")) return false;
+    setSyncBusy("load");
+    try {
+      const team = await loadTeam();
+      const ids = new Set(((team && team.engineers) || []).map((e) => e.id));
+      ids.add(myEngineerId());
+      const projects = [];
+      const tasks = [];
+      const bases = {};
+      const engSettings = {};
+      let mine = null;
+      for (const id of ids) {
+        const f = await ghReadFile(engineerRepo(id), DATA_PATH);
+        if (id === myEngineerId()) {
+          const json = f ? JSON.parse(f.text) : {};
+          await overlaySharedSettings(json);
+          mine = normalizeData(json);
+        }
+        if (!f) {
+          bases[id] = { sha: null, snapshot: null };
+          continue;
+        }
+        const d = id === myEngineerId() ? mine : normalizeData(JSON.parse(f.text));
+        bases[id] = { sha: f.sha, snapshot: JSON.parse(JSON.stringify(d)) };
+        engSettings[id] = d.settings;
+        d.projects.forEach((p) => projects.push(Object.assign({}, p, { _eng: id })));
+        d.tasks.forEach((t) => tasks.push(Object.assign({}, t, { _eng: id })));
+      }
+      backupCurrentData();
+      state.data = Object.assign({}, mine || normalizeData({}), { projects, tasks });
+      if (bases[myEngineerId()] && bases[myEngineerId()].sha) syncOwnMarkers(bases[myEngineerId()].sha, mine);
+      state.bases = bases;
+      state.engSettings = engSettings;
+      state.loadedThisSession = true;
+      cacheDataLocally();
+      setDirty(false);
+      markLastSync("Load (all)");
+      updateLeaderUi();
+      render();
+      toast("Loaded " + ids.size + " engineer repo(s)", "success", undoAction());
+      return true;
+    } catch (e) {
+      toast("Leader load error: " + e.message, "error");
+      return false;
+    } finally {
+      setSyncBusy(null);
+    }
+  }
+  // Engineer mode and leader mode must agree on which version of my own file was last synced.
+  function syncOwnMarkers(sha, data) {
+    state.fileSha = sha;
+    state.baseData = JSON.parse(JSON.stringify(data));
+    state.loadedThisSession = true;
+    try {
+      localStorage.setItem(LS_SHA, sha);
+    } catch (_) {}
+  }
+  function engineerSlice(id) {
+    const me = myEngineerId();
+    const own = (r) => (r._eng || me) === id;
+    return {
+      version: APP_VERSION,
+      updatedAt: null,
+      settings: id === me ? state.data.settings : state.engSettings[id] || state.data.settings,
+      projects: (state.data.projects || []).filter(own).map(stripTag),
+      tasks: (state.data.tasks || []).filter(own).map(stripTag),
+    };
+  }
+  async function saveEngineerFile(id) {
+    const cmp = (x) => JSON.stringify(Object.assign({}, x, { updatedAt: 0, version: 0 }));
+    let slice = engineerSlice(id);
+    const base = (state.bases && state.bases[id]) || { sha: null, snapshot: null };
+    if (base.snapshot ? cmp(slice) === cmp(base.snapshot) : !slice.projects.length && !slice.tasks.length) return "unchanged";
+    let sha = base.sha;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      slice.updatedAt = nowIso();
+      const res = await ghWriteFile(engineerRepo(id), DATA_PATH, JSON.stringify(slice, null, 2), sha, "Update engineering projects data");
+      if (!res.conflict) {
+        state.bases[id] = { sha: res.sha, snapshot: JSON.parse(JSON.stringify(slice)) };
+        if (id === myEngineerId()) syncOwnMarkers(res.sha, slice);
+        return "saved";
+      }
+      const f = await ghReadFile(engineerRepo(id), DATA_PATH);
+      const remote = f ? normalizeData(JSON.parse(f.text)) : normalizeData({});
+      const merged = mergeData(base.snapshot, slice, remote).data;
+      const me = myEngineerId();
+      const tag = (r) => Object.assign({}, r, { _eng: id });
+      state.data.projects = (state.data.projects || []).filter((r) => (r._eng || me) !== id).concat(merged.projects.map(tag));
+      state.data.tasks = (state.data.tasks || []).filter((r) => (r._eng || me) !== id).concat(merged.tasks.map(tag));
+      slice = engineerSlice(id);
+      sha = f && f.sha;
+      base.snapshot = f ? JSON.parse(JSON.stringify(remote)) : null;
+    }
+    return "conflict";
+  }
+  async function saveAllToGithub() {
+    if (!state.settings.pat) {
+      toast("Set a Personal Access Token in Settings first.", "error");
+      return false;
+    }
+    if (state.syncOp) {
+      toast("Sync already in progress.", "error");
+      return false;
+    }
+    setSyncBusy("save");
+    try {
+      const ids = new Set(Object.keys(state.bases || {}));
+      ids.add(myEngineerId());
+      (state.data.projects || []).concat(state.data.tasks || []).forEach((r) => ids.add(r._eng || myEngineerId()));
+      let saved = 0;
+      const conflicted = [];
+      for (const id of ids) {
+        const r = await saveEngineerFile(id);
+        if (r === "saved") saved++;
+        else if (r === "conflict") conflicted.push(id);
+      }
+      await pushSharedSettings();
+      cacheDataLocally();
+      if (conflicted.length) {
+        toast("Saved " + saved + " repo(s), but " + conflicted.join(", ") + " changed again during save. Click Save once more.", "error");
+        return false;
+      }
+      setDirty(false);
+      markLastSync("Save (all)");
+      toast(saved ? "Saved " + saved + " engineer repo(s)" : "Nothing to save", "success");
+      render();
+      return true;
+    } catch (e) {
+      toast("Leader save error: " + e.message, "error");
+      return false;
+    } finally {
+      setSyncBusy(null);
+    }
+  }
+  function loadFromGithub() {
+    return isLeader() ? loadAllFromGithub() : loadEngineerData();
+  }
+  function saveToGithub() {
+    return isLeader() ? saveAllToGithub() : saveEngineerData();
+  }
+  // Company-wide letter numbers: reserved in the shared repo before the letter is issued.
+  async function reserveLetterSeq(project, usedLocal) {
+    if (!state.settings.pat || !myEngineerId()) return null;
+    const year = ScfHelper.issueDateParts(new Date()).year;
+    let result = null;
+    await ghUpdateJson(
+      sharedRepoName(),
+      SHARED_LETTERS,
+      (reg) => {
+        reg = reg && typeof reg === "object" ? reg : {};
+        reg.entries = Array.isArray(reg.entries) ? reg.entries : [];
+        const used = new Set(reg.entries.map((e) => String(e.ref).toUpperCase()));
+        const st = state.data.settings || {};
+        let seq = Number(st.scfYear) === year ? Math.max(1, Number(st.scfSeq) || 1) : 1;
+        reg.entries.forEach((e) => {
+          const m = parseSclRef(e.ref);
+          if (m && m.year === year && m.seq >= seq) seq = m.seq + 1;
+        });
+        usedLocal.forEach((r) => {
+          if (!used.has(r)) {
+            reg.entries.push({ ref: r, engineerId: myEngineerId(), at: nowIso(), seeded: true });
+            used.add(r);
+          }
+        });
+        while (used.has(ScfHelper.formatRef(year, seq).toUpperCase())) seq++;
+        const ref = ScfHelper.formatRef(year, seq);
+        reg.entries.push({ ref, engineerId: myEngineerId(), projectId: project.id, at: nowIso() });
+        result = { ref, year, seq };
+        return reg;
+      },
+      "Reserve letter number"
+    );
+    return result;
   }
 
   function exportJson() {
@@ -1588,12 +2279,22 @@
     reader.onload = () => {
       try {
         const json = JSON.parse(reader.result);
-        state.data = normalizeData(json);
+        if (!json || typeof json !== "object" || (!Array.isArray(json.projects) && !Array.isArray(json.tasks))) {
+          throw new Error("not a Lumax backup (no projects/tasks list). Nothing was changed.");
+        }
+        if (!confirmDiscardUnsaved("Importing this file")) return;
+        const imported = normalizeData(json);
+        backupCurrentData();
+        state.data = imported;
+        // Imported data is not what GitHub holds: force the "remote differs" check on next Save.
+        state.fileSha = null;
+        state.loadedThisSession = false;
+        state.baseData = null;
         cacheDataLocally();
         state.view = "dashboard";
         state.selectedProjectId = null;
         render();
-        toast("Imported JSON file", "success");
+        toast("Imported JSON file", "success", undoAction());
       } catch (e) {
         toast("Import failed: " + e.message, "error");
       }
@@ -1603,7 +2304,8 @@
 
   async function bootstrap() {
     const cached = loadCachedData();
-    if (cached && ((cached.projects && cached.projects.length) || (cached.tasks && cached.tasks.length))) {
+    // A parsed cache — even an empty one — wins, so deleting everything doesn't resurrect the sample seed.
+    if (cached && typeof cached === "object") {
       state.data = normalizeData(cached);
     } else {
       try {
@@ -1611,10 +2313,13 @@
         if (res.ok) {
           state.data = normalizeData(await res.json());
           cacheDataLocally();
+          setDirty(false);
         }
       } catch (_) {}
     }
+    setDirty(dirty);
     updateAuthBadge();
+    updateLeaderUi();
     if (state.settings.pat) fetchGithubUser();
     render();
   }
@@ -1653,13 +2358,13 @@
         state.taskFilters.statusId ||
         state.taskFilters.assignee ||
         state.taskFilters.overdueOnly ||
-        state.taskFilters.hideCompleted ||
         state.taskFilters.projectId ||
         state.taskFilters.client ||
         state.taskFilters.structureType ||
         (state.search || "").trim())
     );
-    const filteredTasks = filterActive ? allTasksFiltered() : allTasks.slice();
+    // An export is a record: completed tasks are always included.
+    const filteredTasks = filterActive ? allTasksFiltered({ skipHideCompleted: true }) : allTasks.slice();
 
     function statusName(id) {
       const s = getStatus(id);
@@ -1787,11 +2492,12 @@
     }
 
     // ---- 1 Dashboard (full dataset KPIs) ----
-    const openAll = allTasks.filter((t) => statusIsOpen(t.statusId));
-    const overdueAll = allTasks.filter((t) => isOverdue(t));
-    const due7All = allTasks.filter((t) => isDueWithin(t, 7));
-    const blockedAll = allTasks.filter((t) => statusIsBlocked(t.statusId));
-    const standaloneOpen = allTasks.filter((t) => !t.projectId && statusIsOpen(t.statusId));
+    const liveTasks = allTasks.filter(isLiveTask);
+    const openAll = liveTasks.filter((t) => statusIsOpen(t.statusId));
+    const overdueAll = liveTasks.filter((t) => isOverdue(t));
+    const due7All = liveTasks.filter((t) => isDueWithin(t, 7));
+    const blockedAll = liveTasks.filter((t) => statusIsBlocked(t.statusId));
+    const standaloneOpen = liveTasks.filter((t) => !t.projectId && statusIsOpen(t.statusId));
     const activeProjects = allProjects.filter((p) => !p.archived);
     const riskProjects = activeProjects.filter((p) => projectAtRisk(p));
 
@@ -2379,6 +3085,7 @@
               `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
               `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}</div>` +
               (normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "approved" ? '<span class="pill signoff">Municipal approved</span> ' : normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "pending" ? '<span class="pill muni-pending">Municipal pending</span> ' : "") +
+              (isLeader() && p._eng ? `<span class="pill">${escapeHtml(p._eng)}</span> ` : "") +
               (hasConformance(p) ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span> ` : "") +
               (cur ? `<div class="stat-sub">Current: ${escapeHtml(cur.name)}</div>` : "") +
               `</article>`
@@ -2401,7 +3108,7 @@
       return;
     }
 
-    const tasks = state.data.tasks || [];
+    const tasks = (state.data.tasks || []).filter(isLiveTask);
     const statuses = getStatuses();
     const open = tasks.filter((t) => statusIsOpen(t.statusId));
     const overdue = tasks.filter((t) => isOverdue(t));
@@ -2452,7 +3159,7 @@
       .slice(0, 8);
 
     const signOffN = (state.data.projects || []).filter((p) => !p.archived && normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "approved").length;
-    const confN = (state.data.projects || []).filter((p) => !p.archived && hasConformance(p)).length;
+    const confN = (state.data.projects || []).filter((p) => inScope(p) && !p.archived && hasConformance(p)).length;
     const siteN = (state.data.projects || []).filter((p) => !p.archived && projectInSiteInvestigation(p)).length;
     const execKpis = execDashboardKpis();
 
@@ -2476,7 +3183,7 @@
       `<div class="dash-grid">` +
       `<div class="dash-card span-4"><h3>Open tasks</h3><div class="stat-big">${open.length}</div><div class="stat-sub">${overdue.length} overdue · ${due7.length} due in 7d</div></div>` +
       `<div class="dash-card span-4"><h3>Standalone</h3><div class="stat-big">${tasks.filter((t) => !t.projectId && statusIsOpen(t.statusId)).length}</div><div class="stat-sub">open without project</div></div>` +
-      `<div class="dash-card span-4"><h3>Active projects</h3><div class="stat-big">${(state.data.projects || []).filter((p) => !p.archived).length}</div><div class="stat-sub">${risk.length} at risk · ${signOffN} municipal approved · ${siteN} site inv. · ${confN} SC letter</div></div>` +
+      `<div class="dash-card span-4"><h3>Active projects</h3><div class="stat-big">${(state.data.projects || []).filter((p) => inScope(p) && !p.archived).length}</div><div class="stat-sub">${risk.length} at risk · ${signOffN} municipal approved · ${siteN} site inv. · ${confN} SC letter</div></div>` +
       `<div class="dash-card span-6"><h3>Open by status</h3><div class="status-bars">` +
       byStatus
         .map((x) => {
@@ -2501,7 +3208,7 @@
         ? assigneeRows
             .map(
               ([a, c]) =>
-                `<div class="stat-row"><button type="button" class="linkish dash-filter-assignee" data-assignee="${escapeHtml(a === "(unassigned)" ? "" : a)}">${escapeHtml(a)}</button><span>${c.overdue} overdue · ${c.due7} due-7d</span></div>`
+                `<div class="stat-row"><button type="button" class="linkish dash-filter-assignee" data-assignee="${escapeHtml(a === "(unassigned)" ? "__unassigned__" : a)}">${escapeHtml(a)}</button><span>${c.overdue} overdue · ${c.due7} due-7d</span></div>`
             )
             .join("")
         : `<div class="stat-sub">No upcoming deadlines</div>`) +
@@ -2789,7 +3496,7 @@
       `</span>` +
       `<span><strong>Structural Conformance Letter:</strong> ${escapeHtml(conformanceLabel(p.conformanceStatus))}` +
       (p.conformanceRef ? ` · ${escapeHtml(p.conformanceRef)}` : "") +
-      (p.conformanceIssuedAt ? ` · ${escapeHtml(String(p.conformanceIssuedAt).slice(0, 10))}` : "") +
+      (p.conformanceIssuedAt ? ` · ${escapeHtml(sastDate(p.conformanceIssuedAt))}` : "") +
       `</span>` +
       (() => {
         const cur = projectCurrentPhase(p);
@@ -2910,6 +3617,7 @@
     container.querySelectorAll(".task-card").forEach((card) => {
       card.addEventListener("click", () => openTaskForm(card.dataset.task));
       card.addEventListener("keydown", (e) => {
+        if (e.target !== card) return; // let nested buttons (Mark as Done) handle their own keys
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           openTaskForm(card.dataset.task);
@@ -2938,6 +3646,7 @@
         if (!t || !statusId || t.statusId === statusId) return;
         t.statusId = statusId;
         if (statusIsDone(statusId)) t.doneDate = todayStr();
+        else t.doneDate = null;
         t.updatedAt = nowIso();
         cacheDataLocally();
         toast(localSaveHint("Moved to " + ((getStatus(statusId) || {}).name || statusId)), "success");
@@ -2989,9 +3698,9 @@
     const completedArchiveCount = completedTasksMatchingFilters().length;
     const filterBar =
       `<div class="filter-row">` +
-      `<select id="tf-filter-type"><option value="">All types</option>${getTaskTypes().map((ty) => `<option value="${ty.id}"${f.type === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`).join("")}</select>` +
-      `<select id="tf-filter-status"><option value="">All statuses</option>${statuses.map((s) => `<option value="${s.id}"${f.statusId === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}</select>` +
-      `<select id="tf-filter-assignee"><option value="">All assignees</option>${assignees.map((a) => `<option value="${escapeHtml(a)}"${f.assignee === a ? " selected" : ""}>${escapeHtml(a)}</option>`).join("")}</select>` +
+      `<select id="tf-filter-type"><option value="">All types</option>${getTaskTypes().map((ty) => `<option value="${escapeHtml(ty.id)}"${f.type === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`).join("")}</select>` +
+      `<select id="tf-filter-status"><option value="">All statuses</option>${statuses.map((s) => `<option value="${escapeHtml(s.id)}"${f.statusId === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}</select>` +
+      `<select id="tf-filter-assignee"><option value="">All assignees</option><option value="__unassigned__"${f.assignee === "__unassigned__" ? " selected" : ""}>(unassigned)</option>${assignees.map((a) => `<option value="${escapeHtml(a)}"${f.assignee === a ? " selected" : ""}>${escapeHtml(a)}</option>`).join("")}</select>` +
       `<select id="tf-filter-project"><option value="">All projects</option><option value="__standalone__"${f.projectId === "__standalone__" ? " selected" : ""}>Standalone only</option>${(state.data.projects || []).map((p) => `<option value="${escapeHtml(p.id)}"${f.projectId === p.id ? " selected" : ""}>${escapeHtml(p.projectCode || p.projectName)}</option>`).join("")}</select>` +
       `<select id="tf-filter-structure" title="Structure type"><option value="">All structure types</option>${structureTypes.map((s) => `<option value="${escapeHtml(s)}"${f.structureType === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select>` +
       `<label class="checkbox-label"><input type="checkbox" id="tf-filter-overdue"${f.overdueOnly ? " checked" : ""}/> Overdue</label>` +
@@ -3028,7 +3737,14 @@
       renderBoard(document.getElementById("tasks-board"), tasks, null);
     }
     root.querySelectorAll("tbody tr[data-task]").forEach((row) => {
+      row.tabIndex = 0;
       row.addEventListener("click", () => openTaskForm(row.dataset.task));
+      row.addEventListener("keydown", (e) => {
+        if (e.target === row && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          openTaskForm(row.dataset.task);
+        }
+      });
     });
     bindMarkDoneButtons(root);
 
@@ -3071,24 +3787,75 @@
   }
 
   // ---------- Forms / modals ----------
+  let overlayCloseHook = null;
+  let overlayReturnFocus = null;
+  let overlayDownOnBackdrop = false;
   function showOverlay(html) {
     const ov = document.getElementById("overlay");
+    if (ov.classList.contains("hidden")) overlayReturnFocus = document.activeElement;
     ov.innerHTML = html;
     ov.classList.remove("hidden");
+    const panel = ov.querySelector(".panel");
+    if (panel) {
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-modal", "true");
+      panel.tabIndex = -1;
+      const first = panel.querySelector("input, select, textarea, button");
+      (first || panel).focus();
+    }
+    // Only close when the press AND the release both happen on the backdrop, so a
+    // text-selection drag that ends outside the panel cannot discard a half-filled form.
+    ov.onmousedown = (e) => {
+      overlayDownOnBackdrop = e.target === ov;
+    };
     ov.onclick = (e) => {
-      if (e.target === ov) closeOverlay();
+      if (e.target === ov && overlayDownOnBackdrop) closeOverlay();
+      overlayDownOnBackdrop = false;
+    };
+    ov.onkeydown = (e) => {
+      if (e.key === "Escape") {
+        closeOverlay();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = [...ov.querySelectorAll("a[href], button, input, select, textarea, [tabindex]:not([tabindex='-1'])")].filter(
+        (x) => !x.disabled && x.offsetParent !== null
+      );
+      if (!items.length) return;
+      const firstEl = items[0], lastEl = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && document.activeElement === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      }
     };
   }
   function closeOverlay() {
+    if (overlayCloseHook) {
+      const h = overlayCloseHook;
+      overlayCloseHook = null;
+      h();
+    }
     const ov = document.getElementById("overlay");
     ov.classList.add("hidden");
     ov.innerHTML = "";
     ov.onclick = null;
+    ov.onmousedown = null;
+    ov.onkeydown = null;
+    if (overlayReturnFocus && overlayReturnFocus.focus) {
+      try {
+        overlayReturnFocus.focus();
+      } catch (_) {}
+    }
+    overlayReturnFocus = null;
   }
 
 
   function xmlEscape(s) {
     return String(s == null ? "" : s)
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
@@ -3345,7 +4112,34 @@
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
-  function issueConformance(project) {
+  function usedLetterRefs(extra) {
+    const set = new Set((extra || []).map((r) => String(r).toUpperCase()));
+    (state.data.projects || []).forEach((p) => {
+      if (p.conformanceRef) set.add(String(p.conformanceRef).trim().toUpperCase());
+      (p.sclHistory || []).forEach((h) => h && h.ref && set.add(String(h.ref).trim().toUpperCase()));
+    });
+    ((state.data.settings || {}).voidedLetters || []).forEach((v) => v && v.ref && set.add(String(v.ref).trim().toUpperCase()));
+    return set;
+  }
+  // Letter refs already on GitHub; null when it can't be checked.
+  async function remoteLetterRefs() {
+    if (!state.settings.pat) return null;
+    try {
+      const r = await fetch(contentsUrl() + "?ref=main", { headers: ghHeaders(), cache: "no-store" });
+      if (!r.ok) return null;
+      const remote = normalizeData(JSON.parse(await readRemoteText(await r.json())));
+      const refs = [];
+      (remote.projects || []).forEach((p) => {
+        if (p.conformanceRef) refs.push(p.conformanceRef.trim());
+        (p.sclHistory || []).forEach((h) => h && h.ref && refs.push(h.ref));
+      });
+      ((remote.settings || {}).voidedLetters || []).forEach((v) => v && v.ref && refs.push(v.ref));
+      return refs;
+    } catch (_) {
+      return null;
+    }
+  }
+  async function issueConformance(project) {
     if (!project) return;
     const blockers = sclGate(project);
     if (blockers.length) {
@@ -3366,6 +4160,25 @@
     ) {
       return;
     }
+    let reserved = null;
+    if (myEngineerId() && state.settings.pat) {
+      try {
+        reserved = await reserveLetterSeq(project, [...usedLetterRefs([])]);
+      } catch (e) {
+        toast("Shared letter register unavailable: " + e.message, "error");
+        if (!confirm("Could not reserve a letter number in the shared register.\n\nIssuing now risks a duplicate number. Continue anyway?")) return;
+      }
+    }
+    const remoteRefs = reserved ? [] : await remoteLetterRefs();
+    if (
+      !reserved &&
+      remoteRefs === null &&
+      !confirm(
+        "Could not check GitHub for letter numbers already issued by others.\n\nIf someone else has issued a letter, this number could be a duplicate. Continue anyway?"
+      )
+    ) {
+      return;
+    }
     project.sclUndoSnapshot = {
       conformanceStatus: normalizeConformanceStatus(project.conformanceStatus),
       conformanceRef: project.conformanceRef || "",
@@ -3374,7 +4187,11 @@
       activePhaseId: project.activePhaseId || null,
     };
     const settings = state.data.settings || (state.data.settings = {});
-    const meta = ScfHelper.allocateRef(settings, new Date());
+    if (reserved) {
+      settings.scfYear = reserved.year;
+      settings.scfSeq = reserved.seq;
+    }
+    const meta = ScfHelper.allocateRef(settings, new Date(), usedLetterRefs(remoteRefs || []));
     const snap = ScfHelper.snapshot(project, getEngineerDefaults(), meta);
     project.conformanceStatus = "approved";
     project.conformanceRef = meta.ref;
@@ -3395,6 +4212,18 @@
     cacheDataLocally();
     toast(localSaveHint("Created " + meta.ref), "success");
     render();
+    // Reserve the number on GitHub before the letter leaves the building.
+    if (state.settings.pat) {
+      const saved = await saveToGithub();
+      if (
+        !saved &&
+        !confirm(
+          meta.ref + " is not saved to GitHub yet, so another engineer could be given the same number.\n\nDownload the letter anyway? (Save again afterwards.)"
+        )
+      ) {
+        return;
+      }
+    }
     downloadSclDocx(project).catch((err) => {
       console.error(err);
       toast("Word download failed — opening print preview instead", "error");
@@ -3438,12 +4267,9 @@
       const year = Number(settings.scfYear);
       let seq = Number(settings.scfSeq);
       if (!Number.isFinite(seq) || seq < 1) seq = 1;
-      // If this ref was the last allocated number (scfSeq points at next), decrement.
-      if (parsed.year === year && parsed.seq === seq - 1) {
-        settings.scfSeq = Math.max(1, seq - 1);
-        if (settings.sclSeq != null) settings.sclSeq = settings.scfSeq;
-        decremented = true;
-      }
+      // A letter may already have been downloaded or sent, so its number is never recycled:
+      // an undone letter is always recorded as voided and the sequence keeps moving forward.
+      void year; void seq;
     }
     if (!decremented) {
       if (!Array.isArray(settings.voidedLetters)) settings.voidedLetters = [];
@@ -3610,10 +4436,21 @@
       `<div class="panel wide" role="dialog" aria-label="Settings">` +
         `<h2>Settings <span class="version-badge" style="background:#eef2f7;color:var(--navy)">v${APP_VERSION}</span></h2>` +
         `<div class="form-group"><label>GitHub owner</label><input id="set-owner" value="${escapeHtml(s.owner)}" /></div>` +
-        `<div class="form-group"><label>Repository</label><input id="set-repo" value="${escapeHtml(s.repo)}" /></div>` +
+        `<div class="form-group"><label>Engineer ID</label>` +
+        `<input id="set-eng-id" value="${escapeHtml(s.engineerId || "")}" placeholder="e.g. lucian-du-plessis"${s.engineerIdLocked ? " readonly" : ""} />` +
+        `<p class="hint">${
+          s.engineerId
+            ? "Your data repo: <code>" + escapeHtml(s.owner) + "/" + escapeHtml(engineerRepo(s.engineerId)) + "</code>. " + (s.engineerIdLocked ? "The ID is locked because it has been used." : "Locked after the first Save or Load.")
+            : "Leave empty to keep using the single shared repo below (legacy). Set it to save into <code>" + escapeHtml(DEFAULT_REPO) + "-&lt;id&gt;</code>."
+        }</p></div>` +
+        `<div class="form-group" id="set-repo-wrap"${s.engineerId ? ' style="display:none"' : ""}><label>Repository (legacy single repo)</label><input id="set-repo" value="${escapeHtml(s.repo)}" /></div>` +
+        `<div class="form-group"><label>Shared repo (settings, letter numbers, team list)</label><input id="set-shared-repo" value="${escapeHtml(s.sharedRepo || DEFAULT_REPO + "-shared")}" /></div>` +
+        `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="set-role-leader"${s.role === "leader" ? " checked" : ""}/> I am the team leader (unlock with a password to see all engineers)</label></div>` +
         `<div class="form-group"><label>Personal Access Token (PAT)</label>` +
         `<input id="set-pat" type="password" autocomplete="off" value="" placeholder="${s.pat ? "•••• token saved — paste to replace" : "ghp_… or github_pat_…"}" />` +
-        `<p class="hint">Stored only in this browser's localStorage — never written to projects.json. Each engineer uses their own PAT.</p></div>` +
+        `<p class="hint">Stored only in this browser's localStorage — never written to projects.json. Each engineer uses their own PAT.</p>` +
+        (s.pat ? `<button type="button" class="btn btn-secondary btn-sm" id="set-remove-pat">Remove saved token</button>` : "") +
+        `</div>` +
         `<div class="form-group"><label>My name (for Dashboard “My work”)</label>` +
         `<input id="set-my-name" value="${escapeHtml(ds.myAssignee || "")}" placeholder="e.g. Alex Engineer" />` +
         `<p class="hint">Match the assignee string used on tasks.</p></div>` +
@@ -3660,7 +4497,7 @@
       const row = document.createElement("div");
       row.className = "dyn-row";
       row.innerHTML =
-        `<input class="tt-id" value="${escapeHtml((tt && tt.id) || "")}" placeholder="id (e.g. site_visit)" style="max-width:28%" />` +
+        `<input class="tt-id" value="${escapeHtml((tt && tt.id) || "")}" placeholder="id (e.g. site_visit)" style="max-width:28%"${tt && tt.id ? ' readonly title="Ids are fixed once created (tasks reference them). Remove and re-add to change."' : ""} />` +
         `<input class="tt-name" value="${escapeHtml((tt && tt.name) || "")}" placeholder="Label" />` +
         `<button type="button" class="btn btn-secondary btn-sm tt-rm">×</button>`;
       row.querySelector(".tt-rm").onclick = () => row.remove();
@@ -3718,14 +4555,31 @@
     document.getElementById("set-add-status").onclick = () =>
       addStatusRow({ id: uid("status"), name: "", color: "#6b7c93", category: "todo" });
 
+    if (s.engineerId && !isLeader()) {
+      [box, ttBox, ptBox, stTypeBox].forEach((b) => b.querySelectorAll("input,select,button").forEach((x) => (x.disabled = true)));
+      ["set-add-status", "set-add-task-type", "set-add-project-type", "set-add-structure-type"].forEach((id) => {
+        const b = document.getElementById(id);
+        if (b) b.style.display = "none";
+      });
+      const note = document.createElement("p");
+      note.className = "hint";
+      note.textContent = "Statuses, task types, project types and structure types are shared by the whole team and can only be changed by the team leader.";
+      box.parentNode.insertBefore(note, box);
+    }
     document.getElementById("set-cancel").onclick = closeOverlay;
+    const rmPat = document.getElementById("set-remove-pat");
+    if (rmPat) {
+      rmPat.onclick = () => {
+        if (!confirm("Remove the saved GitHub token from this browser? You can paste it again later.")) return;
+        state.settings.pat = "";
+        state.githubUser = null;
+        saveBrowserSettings();
+        updateAuthBadge();
+        closeOverlay();
+        toast("Token removed from this browser.", "success");
+      };
+    }
     document.getElementById("set-save").onclick = () => {
-      state.settings.owner = document.getElementById("set-owner").value.trim() || DEFAULT_OWNER;
-      state.settings.repo = document.getElementById("set-repo").value.trim() || DEFAULT_REPO;
-      const nextPat = document.getElementById("set-pat").value.trim();
-      if (nextPat) state.settings.pat = nextPat;
-      saveBrowserSettings();
-
       const nextStatuses = [];
       box.querySelectorAll(".dyn-row").forEach((row) => {
         const name = row.querySelector(".st-name").value.trim();
@@ -3742,6 +4596,45 @@
         toast("Keep at least one status", "error");
         return;
       }
+      const nextTaskTypes = [];
+      const seenTt = new Set();
+      ttBox.querySelectorAll(".dyn-row").forEach((row) => {
+        let id = row.querySelector(".tt-id").value.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_\-]/g, "");
+        const name = row.querySelector(".tt-name").value.trim();
+        if (!name) return;
+        if (!id) id = name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_\-]/g, "") || uid("tt");
+        if (seenTt.has(id)) return;
+        seenTt.add(id);
+        nextTaskTypes.push({ id, name });
+      });
+      if (!nextTaskTypes.length) {
+        toast("Keep at least one task type", "error");
+        return;
+      }
+      // Everything validated: from here on, apply.
+      const ownerNext = document.getElementById("set-owner").value.trim() || DEFAULT_OWNER;
+      const engIdNext = s.engineerIdLocked ? s.engineerId : slugifyId(document.getElementById("set-eng-id").value);
+      const repoNext = engIdNext ? engineerRepo(engIdNext) : document.getElementById("set-repo").value.trim() || DEFAULT_REPO;
+      if (ownerNext !== state.settings.owner || repoNext !== state.settings.repo) {
+        state.fileSha = null;
+        state.loadedThisSession = false;
+        state.baseData = null;
+      }
+      state.settings.owner = ownerNext;
+      state.settings.repo = repoNext;
+      state.settings.engineerId = engIdNext;
+      state.settings.sharedRepo = document.getElementById("set-shared-repo").value.trim();
+      const wasLeader = state.settings.role === "leader";
+      state.settings.role = document.getElementById("set-role-leader").checked ? "leader" : "engineer";
+      if (state.settings.role !== "leader" && leaderUnlocked) {
+        leaderUnlocked = false;
+        try {
+          sessionStorage.removeItem(LS_LEADER);
+        } catch (_) {}
+      }
+      const nextPat = document.getElementById("set-pat").value.trim();
+      if (nextPat) state.settings.pat = nextPat;
+      saveBrowserSettings();
       const valid = new Set(nextStatuses.map((s) => s.id));
       const fallback = nextStatuses[0].id;
       (state.data.tasks || []).forEach((t) => {
@@ -3760,21 +4653,6 @@
         address: document.getElementById("set-eng-addr").value.trim() || DEFAULT_ENGINEER.address,
         contact: document.getElementById("set-eng-contact").value.trim() || DEFAULT_ENGINEER.contact,
       };
-      const nextTaskTypes = [];
-      const seenTt = new Set();
-      ttBox.querySelectorAll(".dyn-row").forEach((row) => {
-        let id = row.querySelector(".tt-id").value.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_\-]/g, "");
-        const name = row.querySelector(".tt-name").value.trim();
-        if (!name) return;
-        if (!id) id = name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_\-]/g, "") || uid("tt");
-        if (seenTt.has(id)) return;
-        seenTt.add(id);
-        nextTaskTypes.push({ id, name });
-      });
-      if (!nextTaskTypes.length) {
-        toast("Keep at least one task type", "error");
-        return;
-      }
       const validTypes = new Set(nextTaskTypes.map((t) => t.id));
       (state.data.tasks || []).forEach((t) => {
         if (!validTypes.has(t.type)) t.type = nextTaskTypes[0].id;
@@ -3800,7 +4678,9 @@
       cacheDataLocally();
       closeOverlay();
       updateAuthBadge();
+      updateLeaderUi();
       toast(localSaveHint("Settings saved"), "success");
+      if (state.settings.role === "leader" && !wasLeader && !leaderUnlocked) unlockLeader();
       if (state.settings.pat) fetchGithubUser();
       else {
         state.githubUser = null;
@@ -3881,13 +4761,13 @@
         `</select>` +
         `<p class="hint">pending | approved | n/a (migrates from legacy checkbox).</p></div>` +
         `<div class="form-group"><label>Conformance</label>` +
-        `<select id="pf-conformance">` +
+        `<select id="pf-conformance"${p && p.conformanceRef ? " disabled" : ""}>` +
         CONFORMANCE_STATUSES.map((s) => {
           const cur = p ? normalizeConformanceStatus(p.conformanceStatus) : "none";
-          return `<option value="${s.id}"${cur === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`;
+          return `<option value="${escapeHtml(s.id)}"${cur === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`;
         }).join("") +
         `</select>` +
-        `<p class="hint">Create via <strong>Create SC Letter</strong> on the project (sets approved + LMX-SCL ref).</p></div>` +
+        `<p class="hint">${p && p.conformanceRef ? "Locked: a letter reference exists. Use Undo on the project to void it." : "Create via <strong>Create SC Letter</strong> on the project (sets approved + LMX-SCL ref)."}</p></div>` +
         `</div>` +
         `<div class="form-row" id="pf-signoff-extra">` +
         `<div class="form-group"><label>Sign-off at</label><input type="date" id="pf-signoff-at" value="${escapeHtml(p && p.engineeringSignOffAt ? String(p.engineeringSignOffAt).slice(0, 10) : "")}" /></div>` +
@@ -3895,7 +4775,7 @@
         `</div>` +
         (p && p.conformanceRef
           ? `<p class="hint">Conformance ref: <strong>${escapeHtml(p.conformanceRef)}</strong>` +
-            (p.conformanceIssuedAt ? ` · issued ${escapeHtml(String(p.conformanceIssuedAt).slice(0, 10))}` : "") +
+            (p.conformanceIssuedAt ? ` · issued ${escapeHtml(sastDate(p.conformanceIssuedAt))}` : "") +
             `</p>`
           : "") +
         `<div class="form-group"><label>Drawing numbers</label>` +
@@ -3951,7 +4831,14 @@
 
     if (isEdit) {
       document.getElementById("pf-delete").onclick = () => {
-        if (!confirm("Permanently delete this project and unlink its tasks (tasks become standalone)?")) return;
+        if (!confirm("Delete this project and unlink its tasks (tasks become standalone)? You can Undo right afterwards.")) return;
+        backupCurrentData();
+        const doomed = getProject(projectId);
+        if (doomed && doomed.conformanceRef) {
+          const st = state.data.settings;
+          if (!Array.isArray(st.voidedLetters)) st.voidedLetters = [];
+          st.voidedLetters.push({ ref: doomed.conformanceRef, projectId, issuedAt: doomed.conformanceIssuedAt || null, voidedAt: nowIso() });
+        }
         state.data.tasks.forEach((t) => {
           if (t.projectId === projectId) t.projectId = null;
         });
@@ -3959,7 +4846,7 @@
         cacheDataLocally();
         closeOverlay();
         setView("projects");
-        toast("Project deleted", "success");
+        toast("Project deleted", "success", undoAction());
       };
     }
 
@@ -3987,7 +4874,10 @@
       if (!engineeringSignOff) {
         engineeringSignOffAt = engineeringSignOffAt || null;
       }
-      const conformanceStatus = normalizeConformanceStatus(document.getElementById("pf-conformance").value);
+      const conformanceStatus =
+        isEdit && p && p.conformanceRef
+          ? normalizeConformanceStatus(p.conformanceStatus)
+          : normalizeConformanceStatus(document.getElementById("pf-conformance").value);
       const poNumber = document.getElementById("pf-po").value.trim();
       const popReference = document.getElementById("pf-pop").value.trim();
       const invoiceNumber = document.getElementById("pf-inv").value.trim();
@@ -4072,6 +4962,7 @@
           createdAt: nowIso(),
           updatedAt: nowIso(),
         });
+        Object.assign(np, newRecordTag());
         state.data.projects.push(np);
       }
       cacheDataLocally();
@@ -4173,7 +5064,7 @@
       .join("");
 
     const typeOpts = getTaskTypes().map(
-      (ty) => `<option value="${ty.id}"${initialType === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`
+      (ty) => `<option value="${escapeHtml(ty.id)}"${initialType === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`
     ).join("");
 
     showOverlay(
@@ -4310,6 +5201,7 @@
         payload.discipline = (document.getElementById("tf-discipline") || {}).value || "";
       }
       if (statusIsDone(statusId) && !payload.doneDate) payload.doneDate = todayStr();
+      if (!statusIsDone(statusId)) payload.doneDate = null;
 
       if (isEdit) {
         Object.assign(t, payload);
@@ -4319,6 +5211,7 @@
             id: uid("task"),
             createdAt: nowIso(),
             ...payload,
+            ...newRecordTag(),
           })
         );
       }
@@ -4349,6 +5242,11 @@
     // Note: index.html has btn-export-excel only (no btn-export). Binding a missing
     // id throws and aborts wire()/bootstrap — that broke live Pages after v2.
     on("btn-settings", "onclick", openSettings);
+    on("btn-leader", "onclick", () => (leaderUnlocked ? lockLeader() : unlockLeader()));
+    on("eng-filter", "onchange", (e) => {
+      state.engFilter = e.target.value;
+      render();
+    });
     on("btn-load", "onclick", loadFromGithub);
     on("btn-save", "onclick", saveToGithub);
     on("btn-export", "onclick", exportJson);
@@ -4365,7 +5263,8 @@
     on("btn-new-project", "onclick", () => openProjectForm(null));
     on("global-search", "oninput", (e) => {
       state.search = e.target.value;
-      render();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(render, 200);
     });
     on("show-archived", "onchange", (e) => {
       state.showArchived = e.target.checked;
@@ -4373,6 +5272,7 @@
     });
   }
 
+  let searchTimer = null;
   function startApp() {
     wire();
     if (window.__LUMAX_STARTED) {

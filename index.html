@@ -23,9 +23,12 @@
       <input type="search" class="search-input header-search" id="global-search" placeholder="Search…" aria-label="Search" />
       <span class="auth-badge" id="auth-badge">Not signed in</span>
       <span class="last-sync" id="last-sync"></span>
+      <select id="eng-filter" class="hidden" aria-label="Engineer" title="Leader view: filter by engineer"></select>
+      <button type="button" class="btn btn-ghost btn-sm hidden" id="btn-leader" title="Unlock the team leader view">Unlock leader view</button>
       <button type="button" class="btn btn-ghost btn-sm" id="btn-load" title="Load data/projects.json from GitHub">Load</button>
       <button type="button" class="btn btn-ghost btn-sm" id="btn-save" title="Save data/projects.json to GitHub">Save</button>
       <button type="button" class="btn btn-ghost btn-sm" id="btn-export-excel" title="Export Excel (.xlsx)">Export Excel</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-export" title="Download JSON backup">Backup</button>
       <button type="button" class="btn btn-ghost btn-sm" id="btn-import" title="Import JSON backup">Import</button>
       <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
       <button type="button" class="btn btn-ghost btn-sm" id="btn-settings">Settings</button>

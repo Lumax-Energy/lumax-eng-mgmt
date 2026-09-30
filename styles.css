@@ -637,3 +637,5 @@ button:disabled,
 
 .completed-by-month[hidden] { display: none !important; }
 .hide-completed-label { font-weight: 600; color: var(--navy); }
+
+.btn.unsaved::after { content: " •"; color: #e67e22; font-weight: 700; }

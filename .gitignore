@@ -16,3 +16,7 @@ Thumbs.db
 *.pem
 *.key
 secrets/
+
+# Real project data lives in private per-engineer repos, never in this public app repo
+data/
+projects/

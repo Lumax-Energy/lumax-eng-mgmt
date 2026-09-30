@@ -120,3 +120,18 @@ UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCL / Summ
 - Do not share another engineer’s credentials; each person uses their own PAT.
 - Treat `data/projects.json` as shared business data — coordinate Saves to avoid overwriting each other’s work.
 - SAMPLE seed must stay fictional (no real client / engineer PII).
+
+## Team setup (one private repo per engineer)
+
+This app repo is **public code only** — never commit real project data here.
+
+| Repo (all private, same owner) | Holds |
+|---|---|
+| `lumax-eng-mgmt-<engineer-id>` | That engineer's `data/projects.json` |
+| `lumax-eng-mgmt-shared` | `team.json` (engineers, leader, soft-lock password hash), `settings.json` (shared statuses/types), `letters.json` (company-wide SC letter numbers) |
+
+- **Settings → Engineer ID** (e.g. `lucian-du-plessis`) selects your repo. It locks after the first Save/Load; the display name can still change.
+- One token with Contents read/write on all these repos is shared.
+- **Team leader:** tick "I am the team leader", then *Unlock leader view* (password is a soft lock, not strong security). Load then reads every engineer's repo; Save writes each repo that changed. Use the Engineer filter to focus on one person.
+- Shared lists (statuses, task/project/structure types) can only be edited by the leader.
+- SC letter numbers are reserved in `letters.json` before a letter is issued, so two engineers can never get the same number.
