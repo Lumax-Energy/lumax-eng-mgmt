@@ -2434,458 +2434,460 @@
   }
 
   // ---------- Excel export (SheetJS) ----------
-  function exportExcel() {
+  async function exportExcel() {
     if (typeof XLSX === "undefined") {
       toast("SheetJS failed to load. Check CDN / network.", "error");
       return;
     }
 
+    // ---- Lumax palette (matches the app) ----
+    const C = {
+      navy: "0B1F3A", navyMid: "14325C", accent: "2F80ED", accentTint: "EAF2FD",
+      text: "1A2332", muted: "5C6B7E", border: "D8DEE8", zebra: "F6F8FB", white: "FFFFFF",
+      green: "1A7F4B", greenTint: "E3F4EA", amber: "B86E00", amberTint: "FDF1DE", red: "C0392B", redTint: "FBE7E5",
+    };
+    const fill = (rgb) => ({ patternType: "solid", fgColor: { rgb } });
+    const font = (o) => Object.assign({ name: "Calibri", sz: 10, color: { rgb: C.text } }, o || {});
+    const thin = { style: "thin", color: { rgb: C.border } };
+    const box = { top: thin, bottom: thin, left: thin, right: thin };
+    const S = {
+      brand: { fill: fill(C.navy), font: font({ sz: 18, bold: true, color: { rgb: C.white } }), alignment: { vertical: "center", indent: 1 } },
+      sub: { fill: fill(C.navyMid), font: font({ sz: 11, bold: true, color: { rgb: C.white } }), alignment: { vertical: "center", indent: 1 } },
+      meta: { fill: fill(C.navyMid), font: font({ sz: 9, italic: true, color: { rgb: "C9D6EA" } }), alignment: { vertical: "center", indent: 1 } },
+      stripe: { fill: fill(C.accent) },
+      section: { font: font({ sz: 12, bold: true, color: { rgb: C.navy } }), border: { bottom: { style: "medium", color: { rgb: C.accent } } } },
+      th: { fill: fill(C.navy), font: font({ bold: true, color: { rgb: C.white } }), alignment: { vertical: "center", wrapText: true }, border: box },
+      group: { fill: fill(C.accentTint), font: font({ bold: true, color: { rgb: C.navy }, sz: 11 }), border: box, alignment: { vertical: "center", indent: 1 } },
+      note: { font: font({ sz: 9, italic: true, color: { rgb: C.muted } }), alignment: { wrapText: true, vertical: "top" } },
+      total: { font: font({ bold: true, color: { rgb: C.navy } }), fill: fill(C.accentTint), border: box, alignment: { horizontal: "center" } },
+    };
+    const td = (zebra, extra) =>
+      Object.assign({ font: font(), alignment: { vertical: "top", wrapText: true }, border: box }, zebra ? { fill: fill(C.zebra) } : {}, extra || {});
+    function tint(hex, amount) {
+      const h = String(hex || "").replace("#", "");
+      if (!/^[0-9a-f]{6}$/i.test(h)) return C.zebra;
+      const mix = (i) => Math.round(parseInt(h.substr(i, 2), 16) * amount + 255 * (1 - amount)).toString(16).padStart(2, "0");
+      return (mix(0) + mix(2) + mix(4)).toUpperCase();
+    }
+    // Real Excel dates (sortable, filterable), shown in SAST.
+    const EPOCH = Date.UTC(1899, 11, 30);
+    function xlDate(ymd) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ""))) return null;
+      const [y, m, d] = ymd.split("-").map(Number);
+      return { date: (Date.UTC(y, m - 1, d) - EPOCH) / 864e5, fmt: "dd mmm yyyy" };
+    }
+    function xlDateTime(iso) {
+      const t = Date.parse(iso || "");
+      if (isNaN(t)) return null;
+      return { date: (t + 2 * 36e5 - EPOCH) / 864e5, fmt: "dd mmm yyyy hh:mm" };
+    }
+
+    // ---- Scope ----
     const statuses = getStatuses();
-    const allProjects = state.data.projects || [];
-    const allTasks = state.data.tasks || [];
-
-    // Filters apply ONLY to All Tasks + type split sheets.
-    // Dashboard / Projects / Summary / By-* grouping sheets use the full dataset.
-    const filterActive = !!(
-      state.taskFilters &&
-      (state.taskFilters.type ||
-        state.taskFilters.statusId ||
-        state.taskFilters.assignee ||
-        state.taskFilters.overdueOnly ||
-        state.taskFilters.projectId ||
-        state.taskFilters.client ||
-        state.taskFilters.structureType ||
-        (state.search || "").trim())
-    );
+    const allProjects = (state.data.projects || []).filter(inScope);
+    const allTasks = (state.data.tasks || []).filter(inScope);
+    const f = state.taskFilters || {};
+    const filterBits = [];
+    if (f.type) filterBits.push("type: " + typeLabel(f.type));
+    if (f.statusId) filterBits.push("status: " + ((getStatus(f.statusId) || {}).name || f.statusId));
+    if (f.assignee) filterBits.push("assignee: " + (f.assignee === "__unassigned__" ? "(unassigned)" : f.assignee));
+    if (f.overdueOnly) filterBits.push("overdue only");
+    if (f.projectId) filterBits.push("project: " + (f.projectId === "__standalone__" ? "standalone" : ((getProject(f.projectId) || {}).projectCode || "")));
+    if (f.client) filterBits.push("client: " + f.client);
+    if (f.structureType) filterBits.push("structure: " + f.structureType);
+    if ((state.search || "").trim()) filterBits.push('search: "' + state.search.trim() + '"');
+    const filterActive = filterBits.length > 0;
     // An export is a record: completed tasks are always included.
-    const filteredTasks = filterActive ? allTasksFiltered({ skipHideCompleted: true }) : allTasks.slice();
+    const filteredTasks = filterActive ? allTasksFiltered({ skipHideCompleted: true }).filter(inScope) : allTasks.slice();
+    const leader = isLeader();
+    const eng = getEngineerDefaults();
+    const who = leader
+      ? "Team view" + (state.engFilter && state.engFilter !== "all" ? " · " + state.engFilter : " · all engineers")
+      : (state.data.settings && state.data.settings.myAssignee) || eng.name || myEngineerId() || "";
+    const stamp = new Intl.DateTimeFormat("en-ZA", {
+      timeZone: "Africa/Johannesburg", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+    }).format(new Date());
 
-    function statusName(id) {
-      const s = getStatus(id);
-      return s ? s.name : id || "";
-    }
-    function projectOf(t) {
-      return t.projectId ? getProject(t.projectId) : null;
-    }
-    function phaseName(t, p) {
-      if (!p || !t.phaseId) return "";
-      const ph = (p.phases || []).find((x) => x.id === t.phaseId);
-      return ph ? ph.name : "";
-    }
-    function taskRow(t) {
-      const p = projectOf(t);
-      return {
-        "Project code": p ? p.projectCode : "(standalone)",
-        "Project name": p ? p.projectName : "",
-        Client: p ? p.clientName : "",
-        Type: typeLabel(t.type),
-        Title: t.title,
-        Status: statusName(t.statusId),
-        Phase: phaseName(t, p),
-        Assignee: t.assignee || "",
-        Priority: t.priority || "",
-        Due: t.dueDate || "",
-        Overdue: isOverdue(t) ? "yes" : "no",
-        "Ref #": t.refNumber || "",
-        "Raised by": t.raisedBy || "",
-        "Response due": t.responseDue || "",
-        Checker: t.checker || "",
-        "Calc/Drawing ref": t.calcOrDrawingRef || "",
-        "Drawing #": t.drawingNumber || "",
-        Rev: t.rev || "",
-        Discipline: t.discipline || "",
-        "Blocked reason": t.blockedReason || "",
-        "Done date": t.doneDate || "",
-        Description: t.description || "",
-        Standalone: t.projectId ? "no" : "yes",
-        Updated: t.updatedAt || "",
-      };
-    }
-    function sheetFromRows(rows, fallbackHeaders) {
-      if (rows && rows.length) return XLSX.utils.json_to_sheet(rows);
-      const headers = fallbackHeaders || ["(empty)"];
-      return XLSX.utils.aoa_to_sheet([headers]);
-    }
-    /** Shared navy header + freeze/autofilter/borders/widths (Researchy polish). */
-    function applyNavyHeader(ws, opts) {
-      opts = opts || {};
-      if (!ws || !ws["!ref"]) return ws;
-      const range = XLSX.utils.decode_range(ws["!ref"]);
-      const headerRow = opts.headerRow != null ? opts.headerRow : 0;
-      const titleRows = opts.titleRows || 0;
-      const navy = "0B1F3A";
-      const borderColor = "CCCCCC";
-      const zebra = "F5F7FA";
-      const thin = { style: "thin", color: { rgb: borderColor } };
-      const border = { top: thin, bottom: thin, left: thin, right: thin };
-      const colMax = {};
-      for (let R = range.s.r; R <= range.e.r; R++) {
-        for (let C = range.s.c; C <= range.e.c; C++) {
-          const addr = XLSX.utils.encode_cell({ r: R, c: C });
-          let cell = ws[addr];
-          if (!cell) {
-            cell = { t: "s", v: "" };
-            ws[addr] = cell;
+    // ---- Sheet writer: every sheet opens with the Lumax banner ----
+    function newSheet(title, width, scopeNote) {
+      const ws = {};
+      const merges = [];
+      const rows = [];
+      let r = 0;
+      const api = {
+        ws,
+        get r() {
+          return r;
+        },
+        cell(R, Cc, v, s) {
+          let cell;
+          if (v == null || v === "") cell = { t: "s", v: "" };
+          else if (typeof v === "number") cell = { t: "n", v };
+          else if (typeof v === "object" && v.date != null) {
+            cell = { t: "n", v: v.date, z: v.fmt };
+            s = Object.assign({}, s, { numFmt: v.fmt });
+          } else cell = { t: "s", v: String(v) };
+          cell.s = s || {};
+          ws[XLSX.utils.encode_cell({ r: R, c: Cc })] = cell;
+        },
+        band(v, s, h) {
+          for (let c = 0; c < width; c++) api.cell(r, c, c ? "" : v, s);
+          if (width > 1) merges.push({ s: { r, c: 0 }, e: { r, c: width - 1 } });
+          if (h) rows[r] = { hpt: h };
+          r++;
+        },
+        row(values, styleFn, h) {
+          values.forEach((v, c) => api.cell(r, c, v, typeof styleFn === "function" ? styleFn(c, v) : styleFn));
+          if (h) rows[r] = { hpt: h };
+          r++;
+        },
+        section(label) {
+          api.skip();
+          for (let c = 0; c < width; c++) api.cell(r, c, c ? "" : label, S.section);
+          rows[r] = { hpt: 20 };
+          r++;
+        },
+        skip(n) {
+          r += n || 1;
+        },
+        finish(cols, opts) {
+          opts = opts || {};
+          ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(r - 1, 5), c: width - 1 } });
+          ws["!merges"] = merges;
+          ws["!rows"] = rows;
+          ws["!cols"] = cols.map((w) => ({ wch: w }));
+          if (opts.headerRow != null) {
+            const y = opts.headerRow + 1;
+            ws["!freeze"] = { xSplit: 0, ySplit: y, topLeftCell: XLSX.utils.encode_cell({ r: y, c: 0 }), activePane: "bottomLeft", state: "frozen" };
+            if (opts.filter !== false && r - 1 > opts.headerRow)
+              ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: opts.headerRow, c: 0 }, e: { r: r - 1, c: width - 1 } }) };
           }
-          if (cell.v == null) cell.v = "";
-          const str = String(cell.v);
-          colMax[C] = Math.max(colMax[C] || 0, Math.min(str.length, 40));
-          const isHeader = R === headerRow;
-          const isTitle = R < headerRow && R < titleRows;
-          const base = cell.s && typeof cell.s === "object" ? Object.assign({}, cell.s) : {};
-          if (isHeader) {
-            cell.s = Object.assign({}, base, {
-              fill: { patternType: "solid", fgColor: { rgb: navy } },
-              font: { bold: true, color: { rgb: "FFFFFF" }, name: "Calibri", sz: 11 },
-              alignment: { wrapText: true, vertical: "center", horizontal: "left" },
-              border: border,
-            });
-          } else if (isTitle) {
-            cell.s = Object.assign({}, base, {
-              font: { bold: true, color: { rgb: navy }, name: "Calibri", sz: R === 0 ? 14 : 11 },
-              alignment: { wrapText: true, vertical: "center" },
-            });
-          } else {
-            const zebraFill = opts.zebra !== false && R > headerRow && (R - headerRow) % 2 === 0;
-            cell.s = Object.assign({}, base, {
-              font: { name: "Calibri", sz: 11, color: { rgb: "1A2332" } },
-              alignment: { wrapText: true, vertical: "top" },
-              border: border,
-              fill: zebraFill ? { patternType: "solid", fgColor: { rgb: zebra } } : base.fill,
-            });
-          }
-        }
-      }
-      const freezeAt = headerRow + 1;
-      ws["!freeze"] = {
-        xSplit: 0,
-        ySplit: freezeAt,
-        topLeftCell: XLSX.utils.encode_cell({ r: freezeAt, c: 0 }),
-        activePane: "bottomLeft",
-        state: "frozen",
+          ws["!margins"] = { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 };
+          return ws;
+        },
       };
-      // Autofilter on header..data (skip pure title-only sheets without header)
-      if (range.e.r >= headerRow) {
-        const af = {
-          s: { r: headerRow, c: range.s.c },
-          e: { r: range.e.r, c: range.e.c },
-        };
-        ws["!autofilter"] = { ref: XLSX.utils.encode_range(af) };
-      }
-      const cols = [];
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const w = Math.max(10, Math.min(42, (colMax[C] || 8) + 2));
-        cols.push({ wch: w });
-      }
-      ws["!cols"] = cols;
-      return ws;
-    }
-    function appendSheet(wb, name, ws, polishOpts) {
-      applyNavyHeader(ws, polishOpts || {});
-      XLSX.utils.book_append_sheet(wb, ws, name);
+      api.band("LUMAX ENERGY", S.brand, 30);
+      api.band("Engineering Management  ·  " + title, S.sub, 20);
+      api.band("Exported " + stamp + " SAST" + (who ? "  ·  " + who : "") + (scopeNote ? "  ·  " + scopeNote : ""), S.meta, 16);
+      api.band("", S.stripe, 4);
+      api.skip();
+      return api;
     }
 
-    // ---- 1 Dashboard (full dataset KPIs) ----
+    // ---- Task table definition ----
+    function statusStyle(t, zebra) {
+      const st = getStatus(t.statusId);
+      return td(false, { fill: fill(tint(st && st.color, 0.28)), font: font({ bold: true, color: { rgb: C.navy } }), alignment: { vertical: "top", horizontal: "center" } });
+    }
+    const PRIO = { high: [C.red, "High"], medium: [C.amber, "Medium"], low: [C.muted, "Low"] };
+    const taskCols = [
+      leader && { label: "Engineer", w: 16, get: (t) => t._eng || myEngineerId() },
+      { label: "Project code", w: 14, get: (t, p) => (p ? p.projectCode : "Standalone") },
+      { label: "Project", w: 26, get: (t, p) => (p ? p.projectName : "") },
+      { label: "Client", w: 20, get: (t, p) => (p ? p.clientName : "") },
+      { label: "Type", w: 14, get: (t) => typeLabel(t.type) },
+      { label: "Title", w: 38, get: (t) => t.title },
+      { label: "Status", w: 12, get: (t) => (getStatus(t.statusId) || {}).name || t.statusId, style: (t, z) => statusStyle(t, z) },
+      { label: "Phase", w: 14, opt: true, get: (t, p) => { const ph = p && (p.phases || []).find((x) => x.id === t.phaseId); return ph ? ph.name : ""; } },
+      { label: "Assignee", w: 16, get: (t) => t.assignee || "" },
+      { label: "Priority", w: 10, get: (t) => (PRIO[t.priority] || ["", t.priority || ""])[1], style: (t, z) => td(z, { font: font({ bold: t.priority === "high", color: { rgb: (PRIO[t.priority] || [C.text])[0] } }), alignment: { vertical: "top", horizontal: "center" } }) },
+      { label: "Due", w: 13, get: (t) => xlDate(t.dueDate), style: (t, z) => (isOverdue(t) ? td(false, { fill: fill(C.redTint), font: font({ bold: true, color: { rgb: C.red } }) }) : td(z)) },
+      { label: "Overdue", w: 10, get: (t) => (isOverdue(t) ? "Overdue" : ""), style: (t, z) => td(z, { font: font({ bold: true, color: { rgb: C.red } }), alignment: { vertical: "top", horizontal: "center" } }) },
+      { label: "Completed", w: 13, get: (t) => xlDate(t.doneDate), style: (t, z) => td(z, { font: font({ color: { rgb: C.green } }) }) },
+      { label: "Discipline", w: 16, opt: true, get: (t) => t.discipline },
+      { label: "Ref #", w: 12, opt: true, get: (t) => t.refNumber },
+      { label: "Raised by", w: 14, opt: true, get: (t) => t.raisedBy },
+      { label: "Response due", w: 13, opt: true, get: (t) => xlDate(t.responseDue) },
+      { label: "Checker", w: 14, opt: true, get: (t) => t.checker },
+      { label: "Calc / drawing ref", w: 16, opt: true, get: (t) => t.calcOrDrawingRef },
+      { label: "Drawing #", w: 14, opt: true, get: (t) => t.drawingNumber },
+      { label: "Rev", w: 6, opt: true, get: (t) => t.rev },
+      { label: "Blocked reason", w: 24, opt: true, get: (t) => t.blockedReason },
+      { label: "Description", w: 44, opt: true, get: (t) => t.description },
+      { label: "Last updated", w: 17, get: (t) => xlDateTime(t.updatedAt), style: (t, z) => td(z, { font: font({ color: { rgb: C.muted }, sz: 9 }) }) },
+    ].filter(Boolean);
+    function colsFor(tasks) {
+      // Leave out type-specific columns that nobody filled in on this sheet.
+      return taskCols.filter((c) => !c.opt || tasks.some((t) => { const v = c.get(t, t.projectId ? getProject(t.projectId) : null); return v != null && v !== ""; }));
+    }
+    function writeTaskRows(sh, cols, tasks, startZebra) {
+      tasks.forEach((t, i) => {
+        const p = t.projectId ? getProject(t.projectId) : null;
+        const z = (i + (startZebra || 0)) % 2 === 1;
+        sh.row(cols.map((c) => c.get(t, p)), (ci) => (cols[ci].style ? cols[ci].style(t, z) : td(z)));
+      });
+    }
+    const byDue = (a, b) => String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999"));
+    function taskSheet(title, tasks, scopeNote) {
+      const list = tasks.slice().sort((a, b) => Number(statusIsDone(a.statusId)) - Number(statusIsDone(b.statusId)) || byDue(a, b));
+      const cols = colsFor(list);
+      const sh = newSheet(title + "  (" + list.length + ")", cols.length, scopeNote);
+      const headerRow = sh.r;
+      sh.row(cols.map((c) => c.label), S.th, 22);
+      if (!list.length) sh.band("No tasks in this view.", S.note);
+      writeTaskRows(sh, cols, list);
+      return sh.finish(cols.map((c) => c.w), { headerRow });
+    }
+    // Grouped report: a band per group, then its tasks.
+    function groupedSheet(title, tasks, keyOf, labelOf) {
+      const cols = colsFor(tasks);
+      const sh = newSheet(title, cols.length);
+      const headerRow = sh.r;
+      sh.row(cols.map((c) => c.label), S.th, 22);
+      const groups = new Map();
+      tasks.forEach((t) => {
+        const k = keyOf(t);
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(t);
+      });
+      [...groups.keys()].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })).forEach((k) => {
+        const g = groups.get(k).sort((a, b) => Number(statusIsDone(a.statusId)) - Number(statusIsDone(b.statusId)) || byDue(a, b));
+        const open = g.filter((t) => statusIsOpen(t.statusId)).length;
+        const od = g.filter(isOverdue).length;
+        sh.band(labelOf(k) + "   ·   " + g.length + " task" + (g.length === 1 ? "" : "s") + "  ·  " + open + " open" + (od ? "  ·  " + od + " overdue" : ""), S.group, 20);
+        writeTaskRows(sh, cols, g);
+      });
+      if (!tasks.length) sh.band("No tasks.", S.note);
+      return sh.finish(cols.map((c) => c.w), { headerRow, filter: false });
+    }
+
+    // ---- Dashboard ----
     const liveTasks = allTasks.filter(isLiveTask);
     const openAll = liveTasks.filter((t) => statusIsOpen(t.statusId));
-    const overdueAll = liveTasks.filter((t) => isOverdue(t));
+    const overdueAll = liveTasks.filter(isOverdue);
     const due7All = liveTasks.filter((t) => isDueWithin(t, 7));
     const blockedAll = liveTasks.filter((t) => statusIsBlocked(t.statusId));
-    const standaloneOpen = liveTasks.filter((t) => !t.projectId && statusIsOpen(t.statusId));
     const activeProjects = allProjects.filter((p) => !p.archived);
-    const riskProjects = activeProjects.filter((p) => projectAtRisk(p));
+    const riskProjects = activeProjects.filter(projectAtRisk);
+    const num = (z, extra) => td(z, Object.assign({ alignment: { horizontal: "center", vertical: "top" } }, extra || {}));
+    const bar = (n, max) => (max ? "█".repeat(Math.max(n ? 1 : 0, Math.round((n / max) * 24))) : "");
+    const barStyle = (rgb) => td(false, { font: font({ color: { rgb: rgb || C.accent } }), alignment: { vertical: "center" } });
 
-    const dash = [];
-    dash.push(["Lumax Energy — Engineering Management — Dashboard"]);
-    dash.push(["Exported at", nowIso()]);
-    dash.push(["Filter note", filterActive
-      ? "Active UI filters apply to All Tasks + type sheets only. This Dashboard sheet is the FULL dataset."
-      : "No task filters active — all task sheets use the full dataset."]);
-    dash.push([]);
-    dash.push(["KPI", "Value", "Light", "Note"]);
-    const excelKpis = execDashboardKpis();
-    excelKpis.forEach((k) => {
-      dash.push([k.label, k.value, k.light, k.note]);
+    const W = 6;
+    const d = newSheet("Dashboard", W);
+    d.section("Key indicators");
+    d.row(["Indicator", "Value", "Status", "Comment", "", ""], S.th, 20);
+    const LIGHT = { green: [C.green, C.greenTint, "● On track"], amber: [C.amber, C.amberTint, "● Watch"], red: [C.red, C.redTint, "● Action needed"] };
+    execDashboardKpis().forEach((k, i) => {
+      const L = LIGHT[k.light] || [C.muted, C.zebra, k.light || ""];
+      d.row([k.label, k.value, L[2], k.note || "", "", ""], (c) =>
+        c === 1 ? num(false, { font: font({ bold: true, sz: 12, color: { rgb: C.navy } }) })
+        : c === 2 ? td(false, { fill: fill(L[1]), font: font({ bold: true, color: { rgb: L[0] } }) })
+        : td(i % 2 === 1, c === 0 ? { font: font({ bold: true }) } : {}), 18);
     });
-    dash.push([]);
-    dash.push(["Operational snapshot"]);
-    dash.push(["Open tasks", openAll.length]);
-    dash.push(["Due in 7 days", due7All.length]);
-    dash.push(["Blocked", blockedAll.length]);
-    dash.push(["Standalone open", standaloneOpen.length]);
-    dash.push(["Projects at risk", riskProjects.length]);
-    dash.push(["Total tasks", allTasks.length]);
-    dash.push([]);
+    d.section("Workload snapshot");
+    [
+      ["Open tasks", openAll.length], ["Overdue", overdueAll.length], ["Due in the next 7 days", due7All.length],
+      ["Blocked", blockedAll.length], ["Active projects", activeProjects.length], ["Projects at risk", riskProjects.length],
+      ["Completed tasks (all time)", allTasks.filter((t) => statusIsDone(t.statusId)).length],
+    ].forEach(([k, v], i) => d.row([k, v], (c) => (c ? num(i % 2 === 1, { font: font({ bold: true, color: { rgb: k === "Overdue" && v ? C.red : C.navy } }) }) : td(i % 2 === 1))));
 
-    dash.push(["Open by status"]);
-    dash.push(["Status", "Count"]);
-    statuses.forEach((s) => {
-      dash.push([s.name, openAll.filter((t) => t.statusId === s.id).length]);
+    d.section("Open work by status");
+    d.row(["Status", "Open", "", "", "", ""], S.th);
+    const stCounts = statuses.map((s) => [s, openAll.filter((t) => t.statusId === s.id).length]).filter(([s]) => s.category !== "done");
+    const stMax = Math.max(0, ...stCounts.map((x) => x[1]));
+    stCounts.forEach(([s, n]) => {
+      d.row([s.name, n, bar(n, stMax), "", "", ""], (c) => (c === 0 ? td(false, { fill: fill(tint(s.color, 0.28)), font: font({ bold: true, color: { rgb: C.navy } }) }) : c === 1 ? num(false) : barStyle(tint(s.color, 0.9))));
     });
-    dash.push([]);
 
-    dash.push(["Open by type"]);
-    dash.push(["Type", "Count"]);
-    getTaskTypes().forEach((ty) => {
-      dash.push([ty.name, openAll.filter((t) => t.type === ty.id).length]);
+    d.section("Open work by type");
+    d.row(["Type", "Open", "", "", "", ""], S.th);
+    const tyCounts = getTaskTypes().map((ty) => [ty.name, openAll.filter((t) => t.type === ty.id).length]).filter((x) => x[1] > 0);
+    const tyMax = Math.max(0, ...tyCounts.map((x) => x[1]));
+    tyCounts.forEach(([name, n], i) => d.row([name, n, bar(n, tyMax), "", "", ""], (c) => (c === 0 ? td(i % 2 === 1) : c === 1 ? num(i % 2 === 1) : barStyle(C.accent))));
+    if (!tyCounts.length) d.band("No open tasks.", S.note);
+
+    d.section(leader ? "Workload by engineer and assignee" : "Workload by assignee");
+    d.row(["Assignee", "Open", "Overdue", "Due in 7 days", "Blocked", "Completed"], S.th, 20);
+    const people = [...new Set(allTasks.map((t) => (leader ? (t._eng || myEngineerId()) + " — " : "") + (t.assignee || "(unassigned)")))].sort();
+    people.forEach((a, i) => {
+      const m = (t) => (leader ? (t._eng || myEngineerId()) + " — " : "") + (t.assignee || "(unassigned)") === a;
+      const od = overdueAll.filter(m).length;
+      d.row([a, openAll.filter(m).length, od, due7All.filter(m).length, blockedAll.filter(m).length, allTasks.filter((t) => m(t) && statusIsDone(t.statusId)).length], (c) =>
+        c === 0 ? td(i % 2 === 1) : num(i % 2 === 1, c === 2 && od ? { font: font({ bold: true, color: { rgb: C.red } }) } : {}));
     });
-    dash.push([]);
 
-    dash.push(["Overdue / due-7d by assignee"]);
-    dash.push(["Assignee", "Overdue", "Due in 7d", "Open"]);
-    const assigneeKeys = [...new Set(allTasks.map((t) => t.assignee || "(unassigned)"))].sort((a, b) =>
-      a.localeCompare(b)
-    );
-    assigneeKeys.forEach((a) => {
-      const match = (t) => (t.assignee || "(unassigned)") === a;
-      dash.push([
-        a,
-        overdueAll.filter(match).length,
-        due7All.filter(match).length,
-        openAll.filter(match).length,
-      ]);
+    d.section("Clients");
+    d.row(["Client", "Projects", "Open tasks", "Overdue", "Blocked", "SC letters issued"], S.th, 20);
+    const clients = [...new Set(allProjects.map((p) => p.clientName || "(no client)"))].sort();
+    clients.forEach((cn, i) => {
+      const ps = allProjects.filter((p) => (p.clientName || "(no client)") === cn);
+      const ids = new Set(ps.map((p) => p.id));
+      const ts = liveTasks.filter((t) => ids.has(t.projectId));
+      const od = ts.filter(isOverdue).length;
+      d.row([cn, ps.length, ts.filter((t) => statusIsOpen(t.statusId)).length, od, ts.filter((t) => statusIsBlocked(t.statusId)).length, ps.filter(isScfIssued).length], (c) =>
+        c === 0 ? td(i % 2 === 1, { font: font({ bold: true }) }) : num(i % 2 === 1, c === 3 && od ? { font: font({ bold: true, color: { rgb: C.red } }) } : {}));
     });
-    dash.push([]);
-
-    dash.push(["Open by client"]);
-    dash.push(["Client", "Open", "Overdue", "Blocked"]);
-    const clientKeys = [...new Set(allProjects.map((p) => p.clientName || "(no client)"))].sort((a, b) =>
-      a.localeCompare(b)
-    );
-    clientKeys.forEach((c) => {
-      const pids = new Set(allProjects.filter((p) => (p.clientName || "(no client)") === c).map((p) => p.id));
-      const cts = allTasks.filter((t) => t.projectId && pids.has(t.projectId));
-      dash.push([
-        c,
-        cts.filter((t) => statusIsOpen(t.statusId)).length,
-        cts.filter((t) => isOverdue(t)).length,
-        cts.filter((t) => statusIsBlocked(t.statusId)).length,
-      ]);
-    });
-    // standalone as pseudo-client row
-    const stAlone = allTasks.filter((t) => !t.projectId);
-    dash.push([
-      "(standalone)",
-      stAlone.filter((t) => statusIsOpen(t.statusId)).length,
-      stAlone.filter((t) => isOverdue(t)).length,
-      stAlone.filter((t) => statusIsBlocked(t.statusId)).length,
-    ]);
-    dash.push([]);
-
-    dash.push(["Open by project"]);
-    dash.push(["Project code", "Project name", "Client", "Open", "Overdue", "Blocked", "At risk"]);
-    allProjects
-      .slice()
-      .sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || ""))
-      .forEach((p) => {
-        dash.push([
-          p.projectCode,
-          p.projectName,
-          p.clientName,
-          openTaskCount(p),
-          overdueCount(p),
-          blockedCount(p),
-          projectAtRisk(p) ? "yes" : "no",
-        ]);
-      });
-
-    // ---- 2 All Tasks (filtered) ----
-    const allTaskRows = filteredTasks.map(taskRow);
-
-    // ---- 3 Projects (full) ----
-    const projRows = allProjects
-      .slice()
-      .sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || ""))
-      .map((p) => {
-        const pts = projectTasks(p.id);
-        const cur = projectCurrentPhase(p);
-        return {
-          Code: p.projectCode,
-          Name: p.projectName,
-          Client: p.clientName,
-          "Sales order": p.salesOrderNumber,
-          "PO number": p.poNumber || "",
-          "POP reference": p.popReference || "",
-          INV: p.invoiceNumber || "",
-          Address: p.address || "",
-          Contact: p.contactPerson || "",
-          Type: p.projectType || "",
-          "Structure types": (p.structureTypes || []).join("; "),
-          "Phase count": (p.phases || []).length,
-          "Current phase": cur ? cur.name : "",
-          "Municipal sign-off": normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff),
-          "Municipal sign-off at": p.engineeringSignOffAt || "",
-          "Municipal sign-off by": p.engineeringSignOffBy || "",
-          Conformance: conformanceLabel(p.conformanceStatus),
-          "Conformance ref": p.conformanceRef || "",
-          "Conformance issued at": p.conformanceIssuedAt || "",
-          "Open tasks": pts.filter((t) => statusIsOpen(t.statusId)).length,
-          Overdue: pts.filter((t) => isOverdue(t)).length,
-          Blocked: pts.filter((t) => statusIsBlocked(t.statusId)).length,
-          "At risk": projectAtRisk(p) ? "yes" : "no",
-          Archived: p.archived ? "yes" : "no",
-          Updated: p.updatedAt,
-        };
-      });
-
-    // ---- 4 By Assignee (full, sorted) ----
-    const byAssigneeRows = allTasks
-      .slice()
-      .sort((a, b) => {
-        const aa = (a.assignee || "(unassigned)").toLowerCase();
-        const bb = (b.assignee || "(unassigned)").toLowerCase();
-        if (aa !== bb) return aa.localeCompare(bb);
-        return String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999"));
-      })
-      .map((t) => {
-        const row = taskRow(t);
-        row.Assignee = t.assignee || "(unassigned)";
-        return row;
-      });
-
-    // ---- 5 By Client (full, sorted) ----
-    const byClientRows = allTasks
-      .slice()
-      .sort((a, b) => {
-        const pa = projectOf(a);
-        const pb = projectOf(b);
-        const ca = pa ? pa.clientName || "(no client)" : "(standalone)";
-        const cb = pb ? pb.clientName || "(no client)" : "(standalone)";
-        if (ca !== cb) return ca.localeCompare(cb);
-        return (pa ? pa.projectCode || "" : "").localeCompare(pb ? pb.projectCode || "" : "");
-      })
-      .map((t) => taskRow(t));
-
-    // ---- 6 By Project (full, sorted) ----
-    const byProjectRows = allTasks
-      .slice()
-      .sort((a, b) => {
-        const pa = projectOf(a);
-        const pb = projectOf(b);
-        const ca = pa ? pa.projectCode || pa.projectName || "" : "(standalone)";
-        const cb = pb ? pb.projectCode || pb.projectName || "" : "(standalone)";
-        if (ca !== cb) return ca.localeCompare(cb);
-        return String(a.title || "").localeCompare(String(b.title || ""));
-      })
-      .map((t) => taskRow(t));
-
-    // ---- 7–10 type splits (filtered) ----
-    function typeRows(typeId) {
-      return filteredTasks.filter((t) => t.type === typeId).map(taskRow);
-    }
-
-    // ---- 11 Summary type×status (full dataset) ----
-    const summary = [];
-    summary.push(["Type × Status matrix (FULL dataset)"]);
-    summary.push(["Exported at", nowIso()]);
-    summary.push([]);
-    summary.push(["Type \\ Status"].concat(statuses.map((s) => s.name)).concat(["Total"]));
-    getTaskTypes().forEach((ty) => {
-      const row = [ty.name];
-      let total = 0;
-      statuses.forEach((s) => {
-        const n = allTasks.filter((t) => t.type === ty.id && t.statusId === s.id).length;
-        row.push(n);
-        total += n;
-      });
-      row.push(total);
-      summary.push(row);
-    });
-    const totRow = ["Total"];
-    let grand = 0;
-    statuses.forEach((s) => {
-      const n = allTasks.filter((t) => t.statusId === s.id).length;
-      totRow.push(n);
-      grand += n;
-    });
-    totRow.push(grand);
-    summary.push(totRow);
-    summary.push([]);
-    summary.push(["Metric", "Count"]);
-    summary.push(["Total tasks", allTasks.length]);
-    summary.push(["Open", openAll.length]);
-    summary.push(["Overdue", overdueAll.length]);
-    summary.push(["Blocked", blockedAll.length]);
-    summary.push(["Standalone", allTasks.filter((t) => !t.projectId).length]);
-    if (filterActive) {
-      summary.push([]);
-      summary.push(["Note", "UI filters were active: All Tasks + RDN/Design Checks/Drawings/Eng Tasks sheets are filter-scoped. Dashboard, Projects, By Assignee/Client/Project, and Summary use the full dataset."]);
-    }
-
-    const emptyHeaders = Object.keys(taskRow({
-      title: "", type: "eng_task", statusId: "status-todo", projectId: null,
-      assignee: "", priority: "", dueDate: null, phaseId: null,
-      refNumber: "", raisedBy: "", responseDue: null, checker: "", calcOrDrawingRef: "",
-      drawingNumber: "", rev: "", discipline: "", blockedReason: "", doneDate: null,
-      description: "", updatedAt: "",
-    }));
-
-    const scfRows = allProjects
-      .slice()
-      .sort((a, b) => (a.projectCode || "").localeCompare(b.projectCode || ""))
-      .map((p) => {
-        const eng = getEngineerDefaults();
-        return {
-          "Conformance ref": p.conformanceRef || "",
-          Status: conformanceLabel(p.conformanceStatus),
-          Issued: p.conformanceIssuedAt || "",
-          Client: p.clientName || "",
-          "Project name": p.projectName || "",
-          "Project code": p.projectCode || "",
-          INV: p.invoiceNumber || "",
-          PO: p.poNumber || "",
-          POP: p.popReference || "",
-          Address: p.address || "",
-          Contact: p.contactPerson || "",
-          Type: p.projectType || "",
-          "Structure types": (p.structureTypes || []).join("; "),
-          Drawings: (p.drawingNumbers || []).join("; "),
-          "Eng name": eng.name,
-          "ECSA no": eng.ecsaNo,
-          Business: eng.business,
-        };
-      });
-
-    const wb = XLSX.utils.book_new();
-    // 1 Dashboard 2 All Tasks 3 Projects 4 SCL 5 By Assignee 6 By Client 7 By Project
-    // 8 RDN 9 Design Checks 10 Drawings 11 Eng Tasks 12 Summary
-    // Dashboard: title row 0, KPI header around row with "KPI","Value" — find first header-ish row
-    const dashWs = XLSX.utils.aoa_to_sheet(dash);
-    let dashHeaderRow = 0;
-    for (let i = 0; i < dash.length; i++) {
-      if (dash[i] && dash[i][0] === "KPI" && dash[i][1] === "Value") {
-        dashHeaderRow = i;
-        break;
-      }
-    }
-    appendSheet(wb, "Dashboard", dashWs, { headerRow: dashHeaderRow, titleRows: Math.min(3, dashHeaderRow), zebra: false });
-    appendSheet(wb, "All Tasks", sheetFromRows(allTaskRows, emptyHeaders));
-    appendSheet(wb, "Projects", sheetFromRows(projRows, ["Code", "Name", "Client", "PO number", "INV", "Conformance ref"]));
-    appendSheet(wb, "SCL", sheetFromRows(scfRows, ["Conformance ref", "Status", "Client", "INV"]));
-    appendSheet(wb, "By Assignee", sheetFromRows(byAssigneeRows, emptyHeaders));
-    appendSheet(wb, "By Client", sheetFromRows(byClientRows, emptyHeaders));
-    appendSheet(wb, "By Project", sheetFromRows(byProjectRows, emptyHeaders));
-    appendSheet(wb, "RDN", sheetFromRows(typeRows("rdn"), emptyHeaders));
-    appendSheet(wb, "Design Checks", sheetFromRows(typeRows("design_check"), emptyHeaders));
-    appendSheet(wb, "Drawings", sheetFromRows(typeRows("drawing"), emptyHeaders));
-    appendSheet(wb, "Eng Tasks", sheetFromRows(typeRows("eng_task"), emptyHeaders));
-    const summaryWs = XLSX.utils.aoa_to_sheet(summary);
-    let sumHeader = 0;
-    for (let i = 0; i < summary.length; i++) {
-      if (summary[i] && String(summary[i][0] || "").indexOf("Type") === 0) {
-        sumHeader = i;
-        break;
-      }
-    }
-    appendSheet(wb, "Summary", summaryWs, { headerRow: sumHeader, titleRows: Math.min(3, sumHeader), zebra: false });
-
-    XLSX.writeFile(wb, "lumax-eng-mgmt.xlsx");
-    toast(
+    const standalone = liveTasks.filter((t) => !t.projectId);
+    if (standalone.length) d.row(["Standalone tasks", "—", standalone.filter((t) => statusIsOpen(t.statusId)).length, standalone.filter(isOverdue).length, standalone.filter((t) => statusIsBlocked(t.statusId)).length, "—"], (c) => (c === 0 ? td(false, { font: font({ italic: true, color: { rgb: C.muted } }) }) : num(false)));
+    d.skip();
+    d.band(
       filterActive
-        ? "Exported Excel (All Tasks + type sheets filter-scoped; Dashboard/Projects/SCL/Summary/By-* full)"
-        : "Exported Excel workbook (12 sheets)",
-      "success"
+        ? "Task sheets that follow your on-screen filters (" + filterBits.join(", ") + "): All Tasks and the per-type sheets. Everything else covers all data."
+        : "All sheets cover the full data set. Completed tasks are always included.",
+      S.note, 28
     );
+    const dashWs = d.finish([34, 12, 30, 34, 12, 16]);
+
+    // ---- Projects ----
+    const SIGN = { approved: [C.green, C.greenTint, "Approved"], pending: [C.amber, C.amberTint, "Pending"], "n/a": [C.muted, C.zebra, "N/A"] };
+    const projCols = [
+      leader && { label: "Engineer", w: 16, get: (p) => p._eng || myEngineerId() },
+      { label: "Code", w: 13, get: (p) => p.projectCode, style: (p, z) => td(z, { font: font({ bold: true, color: { rgb: C.navy } }) }) },
+      { label: "Project", w: 30, get: (p) => p.projectName },
+      { label: "Client", w: 22, get: (p) => p.clientName },
+      { label: "Type", w: 14, get: (p) => p.projectType },
+      { label: "Structure types", w: 26, get: (p) => (p.structureTypes || []).join(", ") },
+      { label: "Current phase", w: 16, get: (p) => { const c = projectCurrentPhase(p); return c ? c.name : ""; } },
+      { label: "Open tasks", w: 10, get: (p) => openTaskCount(p), style: (p, z) => num(z) },
+      { label: "Overdue", w: 9, get: (p) => overdueCount(p), style: (p, z) => num(z, overdueCount(p) ? { font: font({ bold: true, color: { rgb: C.red } }) } : {}) },
+      { label: "Blocked", w: 9, get: (p) => blockedCount(p), style: (p, z) => num(z) },
+      { label: "At risk", w: 9, get: (p) => (projectAtRisk(p) ? "At risk" : ""), style: (p, z) => (projectAtRisk(p) ? td(false, { fill: fill(C.redTint), font: font({ bold: true, color: { rgb: C.red } }) }) : td(z)) },
+      { label: "Municipal sign-off", w: 15, get: (p) => (SIGN[normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff)] || ["", "", ""])[2], style: (p) => { const s = SIGN[normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff)] || [C.text, C.white]; return td(false, { fill: fill(s[1]), font: font({ bold: true, color: { rgb: s[0] } }), alignment: { horizontal: "center", vertical: "top" } }); } },
+      { label: "SC letter", w: 13, get: (p) => conformanceLabel(p.conformanceStatus), style: (p, z) => (isScfIssued(p) ? td(false, { fill: fill(C.greenTint), font: font({ bold: true, color: { rgb: C.green } }) }) : td(z)) },
+      { label: "SC letter ref", w: 18, get: (p) => p.conformanceRef || "" },
+      { label: "Issued", w: 13, get: (p) => (p.conformanceIssuedAt ? xlDate(sastDate(p.conformanceIssuedAt)) : "") },
+      { label: "Sales order", w: 22, get: (p) => p.salesOrderNumber },
+      { label: "PO", w: 14, get: (p) => p.poNumber, style: (p, z) => (p.poNumber ? td(z) : td(false, { fill: fill(C.amberTint) })) },
+      { label: "POP ref", w: 14, get: (p) => p.popReference, style: (p, z) => (p.popReference ? td(z) : td(false, { fill: fill(C.amberTint) })) },
+      { label: "Invoice", w: 14, get: (p) => p.invoiceNumber, style: (p, z) => (p.invoiceNumber ? td(z) : td(false, { fill: fill(C.amberTint) })) },
+      { label: "Address", w: 32, get: (p) => p.address },
+      { label: "Contact", w: 26, get: (p) => p.contactPerson },
+      { label: "Drawings", w: 30, get: (p) => (p.drawingNumbers || []).join("\n") },
+      { label: "Archived", w: 9, get: (p) => (p.archived ? "Archived" : ""), style: (p, z) => td(z, { font: font({ color: { rgb: C.muted } }) }) },
+      { label: "Last updated", w: 17, get: (p) => xlDateTime(p.updatedAt), style: (p, z) => td(z, { font: font({ color: { rgb: C.muted }, sz: 9 }) }) },
+    ].filter(Boolean);
+    const projList = allProjects.slice().sort((a, b) => Number(!!a.archived) - Number(!!b.archived) || (a.projectCode || "").localeCompare(b.projectCode || "", undefined, { numeric: true }));
+    const ps = newSheet("Projects  (" + projList.length + ")", projCols.length, "Amber cells: commercial details still missing");
+    const pHead = ps.r;
+    ps.row(projCols.map((c) => c.label), S.th, 22);
+    projList.forEach((p, i) => ps.row(projCols.map((c) => c.get(p)), (ci) => (projCols[ci].style ? projCols[ci].style(p, i % 2 === 1) : td(i % 2 === 1))));
+    if (!projList.length) ps.band("No projects.", S.note);
+    const projWs = ps.finish(projCols.map((c) => c.w), { headerRow: pHead });
+
+    // ---- SC letters (issued, plus projects ready to issue) ----
+    const letterProjects = allProjects.filter((p) => p.conformanceRef || isScfReady(p)).sort((a, b) => String(a.conformanceRef || "~").localeCompare(String(b.conformanceRef || "~"), undefined, { numeric: true }));
+    const lCols = [
+      { label: "Letter ref", w: 20, get: (p) => p.conformanceRef || "Ready to issue", style: (p, z) => (p.conformanceRef ? td(z, { font: font({ bold: true, color: { rgb: C.navy } }) }) : td(false, { fill: fill(C.amberTint), font: font({ bold: true, color: { rgb: C.amber } }) })) },
+      { label: "Issued", w: 13, get: (p) => (p.conformanceIssuedAt ? xlDate(sastDate(p.conformanceIssuedAt)) : "") },
+      { label: "Project code", w: 14, get: (p) => p.projectCode },
+      { label: "Project", w: 30, get: (p) => p.projectName },
+      { label: "Client", w: 22, get: (p) => p.clientName },
+      { label: "Structure types", w: 26, get: (p) => (p.structureTypes || []).join(", ") },
+      { label: "Drawings", w: 30, get: (p) => (p.drawingNumbers || []).join("\n") },
+      { label: "Invoice", w: 14, get: (p) => p.invoiceNumber },
+      { label: "PO", w: 14, get: (p) => p.poNumber },
+      { label: "Address", w: 32, get: (p) => p.address },
+      { label: "Signed by", w: 24, get: (p) => ((p.conformanceCert && p.conformanceCert.engineer) || (p.conformanceRef ? {} : eng)).name || "" },
+      { label: "ECSA no", w: 16, get: (p) => ((p.conformanceCert && p.conformanceCert.engineer) || (p.conformanceRef ? {} : eng)).ecsaNo || "" },
+    ];
+    const ls = newSheet("Structural Conformance Letters  (" + allProjects.filter((p) => p.conformanceRef).length + " issued)", lCols.length);
+    const lHead = ls.r;
+    ls.row(lCols.map((c) => c.label), S.th, 22);
+    letterProjects.forEach((p, i) => ls.row(lCols.map((c) => c.get(p)), (ci) => (lCols[ci].style ? lCols[ci].style(p, i % 2 === 1) : td(i % 2 === 1))));
+    if (!letterProjects.length) ls.band("No letters issued and no projects ready to issue yet.", S.note);
+    const voided = ((state.data.settings || {}).voidedLetters || []).filter((v) => v && v.ref);
+    if (voided.length) {
+      ls.section("Voided letter numbers (never re-used)");
+      voided.forEach((v, i) => ls.row([v.ref, v.voidedAt ? xlDate(sastDate(v.voidedAt)) : "", ((getProject(v.projectId) || {}).projectCode) || ""], (c) => td(i % 2 === 1, { font: font({ color: { rgb: C.muted } }) })));
+    }
+    const lettersWs = ls.finish(lCols.map((c) => c.w), { headerRow: lHead });
+
+    // ---- Summary: type × status ----
+    const sumW = statuses.length + 2;
+    const sm = newSheet("Type × status (all tasks)", sumW);
+    const sHead = sm.r;
+    sm.row(["Type"].concat(statuses.map((s) => s.name)).concat(["Total"]), (c) => (c > 0 && c <= statuses.length ? Object.assign({}, S.th, { fill: fill(C.navyMid), alignment: { horizontal: "center", vertical: "center", wrapText: true } }) : S.th), 22);
+    const maxCell = Math.max(1, ...getTaskTypes().flatMap((ty) => statuses.map((s) => allTasks.filter((t) => t.type === ty.id && t.statusId === s.id).length)));
+    getTaskTypes().forEach((ty, i) => {
+      const counts = statuses.map((s) => allTasks.filter((t) => t.type === ty.id && t.statusId === s.id).length);
+      const total = counts.reduce((a, b) => a + b, 0);
+      if (!total) return;
+      sm.row([ty.name].concat(counts).concat([total]), (c) =>
+        c === 0 ? td(i % 2 === 1, { font: font({ bold: true }) })
+        : c === sumW - 1 ? S.total
+        : counts[c - 1] ? num(false, { fill: fill(tint(C.accent, 0.12 + 0.5 * (counts[c - 1] / maxCell))), font: font({ bold: true, color: { rgb: C.navy } }) })
+        : num(i % 2 === 1, { font: font({ color: { rgb: "B0BAC7" } }) }));
+    });
+    const colTotals = statuses.map((s) => allTasks.filter((t) => t.statusId === s.id).length);
+    sm.row(["Total"].concat(colTotals).concat([allTasks.length]), (c) => (c === 0 ? Object.assign({}, S.total, { alignment: { horizontal: "left" } }) : S.total));
+    const summaryWs = sm.finish([22].concat(statuses.map(() => 11)).concat([10]), { headerRow: sHead, filter: false });
+
+    // ---- Workbook ----
+    const wb = XLSX.utils.book_new();
+    wb.Props = { Title: "Lumax Energy — Engineering Management", Subject: "Projects and tasks export", Author: eng.name || myEngineerId() || "Lumax Energy", Company: "Lumax Energy (Pty) Ltd", CreatedDate: new Date() };
+    const tabs = [];
+    const add = (name, ws, tab) => {
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+      tabs.push(tab || C.accent);
+    };
+    add("Dashboard", dashWs, C.navy);
+    add("All Tasks", taskSheet(filterActive ? "All tasks (filtered)" : "All tasks", filteredTasks, filterActive ? "Filtered: " + filterBits.join(", ") : ""));
+    add("Projects", projWs, C.navyMid);
+    add("SC Letters", lettersWs, C.green);
+    add("By Assignee", groupedSheet("Tasks by assignee", allTasks, (t) => (leader ? (t._eng || myEngineerId()) + " — " : "") + (t.assignee || "(unassigned)"), (k) => k), "7FB0F3");
+    add("By Client", groupedSheet("Tasks by client", allTasks, (t) => { const p = t.projectId && getProject(t.projectId); return p ? p.clientName || "(no client)" : "~Standalone"; }, (k) => (k === "~Standalone" ? "Standalone tasks" : k)), "7FB0F3");
+    add("By Project", groupedSheet("Tasks by project", allTasks, (t) => { const p = t.projectId && getProject(t.projectId); return p ? (p.projectCode || "") + "  " + (p.projectName || "") : "~Standalone"; }, (k) => (k === "~Standalone" ? "Standalone tasks" : k.trim())), "7FB0F3");
+    // One sheet per task type that has tasks (includes custom types like Report writing).
+    const used = new Set(wb.SheetNames.map((n) => n.toLowerCase()));
+    getTaskTypes().forEach((ty) => {
+      const list = filteredTasks.filter((t) => t.type === ty.id);
+      if (!list.length) return;
+      let name = String(ty.name || ty.id).replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || ty.id;
+      while (used.has(name.toLowerCase())) name = (name.slice(0, 28) + " " + Math.random().toString(36).slice(2, 4));
+      used.add(name.toLowerCase());
+      add(name, taskSheet(ty.name, list, filterActive ? "Filtered: " + filterBits.join(", ") : ""), "B7D3F8");
+    });
+    add("Summary", summaryWs, C.navy);
+
+    const who4file = (leader ? "Team" : eng.name && !/SAMPLE/.test(eng.name) ? eng.name : myEngineerId() || "").replace(/[^\w\- ]+/g, "").trim();
+    const fileName = "Lumax Eng Mgmt" + (who4file ? " - " + who4file : "") + " - " + todayStr() + ".xlsx";
+    await saveWorkbook(wb, fileName, tabs);
+    toast("Exported " + fileName + " (" + wb.SheetNames.length + " sheets)" + (filterActive ? " — task sheets follow your filters" : ""), "success");
+  }
+
+  // SheetJS can't write frozen panes, tab colours or print setup; add them to the finished file with JSZip.
+  async function saveWorkbook(wb, fileName, tabs) {
+    const bytes = XLSX.write(wb, { bookType: "xlsx", type: "array", cellStyles: true });
+    let blob;
+    try {
+      if (typeof JSZip === "undefined") throw new Error("no JSZip");
+      const zip = await JSZip.loadAsync(bytes);
+      for (let i = 0; i < wb.SheetNames.length; i++) {
+        const path = "xl/worksheets/sheet" + (i + 1) + ".xml";
+        const file = zip.file(path);
+        if (!file) continue;
+        const ws = wb.Sheets[wb.SheetNames[i]];
+        let xml = await file.async("string");
+        const fr = ws["!freeze"] && ws["!freeze"].ySplit;
+        const top = fr ? "A" + (fr + 1) : "A1";
+        const pane = fr
+          ? '<pane ySplit="' + fr + '" topLeftCell="' + top + '" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="' + top + '" sqref="' + top + '"/>'
+          : "";
+        xml = xml.replace(/<sheetView workbookViewId="0"\s*\/>/, '<sheetView workbookViewId="0" showGridLines="0"' + (i === 0 ? ' tabSelected="1"' : "") + ">" + pane + "</sheetView>");
+        const pr = '<tabColor rgb="FF' + (tabs[i] || "2F80ED") + '"/><pageSetUpPr fitToPage="1"/>';
+        xml = /<sheetPr[\s>]/.test(xml)
+          ? xml.replace(/<sheetPr([^>]*)\/>/, "<sheetPr$1>" + pr + "</sheetPr>").replace(/<sheetPr([^>]*)>(?!<tabColor)/, "<sheetPr$1>" + pr)
+          : xml.replace(/(<worksheet[^>]*>)/, "$1<sheetPr>" + pr + "</sheetPr>");
+        xml = xml.replace(
+          /(<pageMargins[^>]*\/>)/,
+          '$1<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>' +
+            "<headerFooter><oddFooter>&amp;L&amp;8Lumax Energy · Engineering Management&amp;R&amp;8Page &amp;P of &amp;N</oddFooter></headerFooter>"
+        );
+        zip.file(path, xml);
+      }
+      blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    } catch (e) {
+      console.warn("xlsx polish skipped", e);
+      blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
   // ---------- Render shell ----------
