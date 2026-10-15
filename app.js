@@ -2359,15 +2359,99 @@
     return result;
   }
 
-  function exportJson() {
-    state.data.updatedAt = nowIso();
-    const blob = new Blob([JSON.stringify(state.data, null, 2)], { type: "application/json" });
+  // Team view: every engineer's projects and tasks, tagged with _eng.
+  // Uses what is on screen when a team Load happened (so unsaved edits are included);
+  // otherwise reads the other engineers' repos fresh and adds my on-screen data.
+  async function teamSnapshot() {
+    const me = myEngineerId();
+    if (state.teamLoaded) {
+      return { data: state.data, engSettings: state.engSettings || {}, ids: Object.keys(state.bases || {}) };
+    }
+    const team = await loadTeam();
+    const ids = new Set(((team && team.engineers) || []).map((e) => e.id));
+    ids.add(me);
+    const projects = (state.data.projects || []).filter((r) => !r._eng || r._eng === me).map((r) => Object.assign({}, r, { _eng: me }));
+    const tasks = (state.data.tasks || []).filter((r) => !r._eng || r._eng === me).map((r) => Object.assign({}, r, { _eng: me }));
+    const engSettings = {};
+    for (const id of ids) {
+      if (id === me) continue;
+      const f = await ghReadFile(engineerRepo(id), DATA_PATH);
+      if (!f) continue;
+      const d = normalizeData(JSON.parse(f.text));
+      engSettings[id] = d.settings;
+      d.projects.forEach((p) => projects.push(Object.assign({}, p, { _eng: id })));
+      d.tasks.forEach((t) => tasks.push(Object.assign({}, t, { _eng: id })));
+    }
+    return { data: Object.assign({}, state.data, { projects, tasks }), engSettings, ids: [...ids] };
+  }
+  function downloadBlob(blob, name) {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "projects.json";
+    a.download = name;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
-    toast("Exported projects.json", "success");
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  async function exportJson() {
+    if (isLeader()) {
+      let snap;
+      try {
+        toast("Collecting every engineer's data…", "success");
+        snap = await teamSnapshot();
+      } catch (e) {
+        toast("Team backup failed — could not read every engineer's repo (" + e.message + "). Nothing was downloaded.", "error");
+        return;
+      }
+      const d = snap.data;
+      const backup = Object.assign({}, d, {
+        updatedAt: nowIso(),
+        teamBackup: true,
+        exportedBy: myEngineerId(),
+        engineers: snap.ids,
+        engineerSettings: snap.engSettings,
+      });
+      downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }), "lumax-team-backup-" + todayStr() + ".json");
+      const per = {};
+      d.projects.concat(d.tasks).forEach((r) => (per[r._eng] = (per[r._eng] || 0) + 1));
+      toast(
+        "Team backup downloaded: " + d.projects.length + " projects, " + d.tasks.length + " tasks from " + snap.ids.length + " engineer(s) (" +
+          Object.keys(per).map((k) => k + " " + per[k]).join(", ") + " records).",
+        "success"
+      );
+      return;
+    }
+    state.data.updatedAt = nowIso();
+    const name = "lumax-backup-" + (myEngineerId() || "data") + "-" + todayStr() + ".json";
+    downloadBlob(new Blob([JSON.stringify(dataForRepo(), null, 2)], { type: "application/json" }), name);
+    toast("Backup downloaded: " + name, "success");
+  }
+  // In the team view the Excel export always covers every engineer, whatever is on screen or filtered.
+  async function exportExcelClick() {
+    if (!isLeader()) return exportExcel();
+    let snap;
+    try {
+      toast("Collecting every engineer's data for the export…", "success");
+      snap = await teamSnapshot();
+    } catch (e) {
+      toast("Team export failed — could not read every engineer's repo (" + e.message + "). Nothing was exported.", "error");
+      return;
+    }
+    const saved = { data: state.data, engSettings: state.engSettings, engFilter: state.engFilter };
+    state.data = snap.data;
+    state.engSettings = snap.engSettings;
+    state.engFilter = "all";
+    let pending;
+    try {
+      // exportExcel builds the whole workbook synchronously before its first await,
+      // so the on-screen data can be restored straight away.
+      pending = exportExcel();
+    } finally {
+      state.data = saved.data;
+      state.engSettings = saved.engSettings;
+      state.engFilter = saved.engFilter;
+    }
+    return pending;
   }
 
   function importJsonFile(file) {
@@ -2884,13 +2968,7 @@
       console.warn("xlsx polish skipped", e);
       blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    downloadBlob(blob, fileName);
   }
 
   // ---------- Render shell ----------
@@ -5357,7 +5435,7 @@
     on("btn-load", "onclick", loadFromGithub);
     on("btn-save", "onclick", saveToGithub);
     on("btn-export", "onclick", exportJson);
-    on("btn-export-excel", "onclick", exportExcel);
+    on("btn-export-excel", "onclick", exportExcelClick);
     on("btn-import", "onclick", () => {
       const fileInput = document.getElementById("import-file");
       if (fileInput) fileInput.click();
