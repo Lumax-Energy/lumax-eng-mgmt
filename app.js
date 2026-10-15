@@ -2043,13 +2043,11 @@
       toast(e.message, "error");
       return false;
     }
+    // Anyone on the team who knows the password may open the leader view.
     if (!team || !team.pw) {
-      if (team && team.leader && team.leader !== myEngineerId()) {
-        toast("A different leader (" + team.leader + ") is already set up.", "error");
-        return false;
-      }
-      const pw = await askPassword("Create leader password", "This soft lock keeps engineers out of the leader view. It is not strong security.", true);
+      const pw = await askPassword("Create leader password", "Whoever knows this password can open the team-wide view. It is a soft lock, not strong security.", true);
       if (!pw) return false;
+      let raced = false;
       try {
         const salt = uid("salt");
         const hash = await sha256Hex(salt + pw);
@@ -2059,6 +2057,11 @@
           (t) => {
             t = t && typeof t === "object" ? t : {};
             t.engineers = Array.isArray(t.engineers) ? t.engineers : [];
+            // Someone else set a password in the meantime: never overwrite it.
+            if (t.pw) {
+              raced = true;
+              return undefined;
+            }
             t.leader = myEngineerId();
             t.pw = { salt, hash };
             return t;
@@ -2069,11 +2072,11 @@
         toast(e.message, "error");
         return false;
       }
-    } else {
-      if (team.leader && team.leader !== myEngineerId()) {
-        toast("Only the team leader (" + team.leader + ") can unlock this view.", "error");
+      if (raced) {
+        toast("A leader password was just set by someone else. Click Unlock leader view again and enter that password.", "error");
         return false;
       }
+    } else {
       const pw = await askPassword("Leader password", "", false);
       if (pw == null) return false;
       if ((await sha256Hex(team.pw.salt + pw)) !== team.pw.hash) {
@@ -4543,7 +4546,7 @@
         }</p></div>` +
         `<div class="form-group" id="set-repo-wrap"${s.engineerId ? ' style="display:none"' : ""}><label>Repository (legacy single repo)</label><input id="set-repo" value="${escapeHtml(s.repo)}" /></div>` +
         `<div class="form-group"><label>Shared repo (settings, letter numbers, team list)</label><input id="set-shared-repo" value="${escapeHtml(s.sharedRepo || DEFAULT_REPO + "-shared")}" /></div>` +
-        `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="set-role-leader"${s.role === "leader" ? " checked" : ""}/> I am the team leader (unlock with a password to see all engineers)</label></div>` +
+        `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="set-role-leader"${s.role === "leader" ? " checked" : ""}/> Team leader view (anyone with the leader password can unlock it to see every engineer's projects and tasks)</label></div>` +
         `<div class="form-group"><label>Personal Access Token (PAT)</label>` +
         `<input id="set-pat" type="text" class="secret-input" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" value="" placeholder="${s.pat ? "•••• token saved — paste to replace" : "ghp_… or github_pat_…"}" />` +
         `<p class="hint">Stored only in this browser's localStorage — never written to projects.json. Each engineer uses their own PAT.</p>` +
