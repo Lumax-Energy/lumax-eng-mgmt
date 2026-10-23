@@ -654,3 +654,18 @@ button:disabled,
 
 /* Token field: masked without type=password, so browsers don't offer to save it. */
 .secret-input { -webkit-text-security: disc; font-family: monospace; }
+
+/* Read-only (viewer, or leader without own repo): hide every control that changes data. */
+.ro-badge { background: #fdf1de; color: #8a5300; border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.78rem; font-weight: 700; }
+body.read-only #btn-save,
+body.read-only #btn-import,
+body.read-only #btn-new-project,
+body.read-only #btn-new-standalone,
+body.read-only #btn-new-task,
+body.read-only #btn-issue-scf,
+body.read-only #btn-undo-scf,
+body.read-only #btn-archive,
+body.read-only #btn-edit-phases,
+body.read-only .btn-mark-done { display: none !important; }
+body.read-only .task-card { cursor: pointer; }
+.read-only-note { background: #fdf1de; color: #8a5300; border-radius: 6px; padding: 0.4rem 0.6rem; margin: 0.4rem 0 0.6rem; }

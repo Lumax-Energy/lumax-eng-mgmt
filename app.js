@@ -203,6 +203,7 @@
       }
     })(),
     teamLoaded: false,
+    ownRepoOk: null,
     engFilter: "all",
     bases: {},
     engSettings: {},
@@ -348,7 +349,7 @@
           pat: s.pat || "",
           engineerId: s.engineerId || "",
           engineerIdLocked: !!s.engineerIdLocked,
-          role: s.role === "leader" ? "leader" : "engineer",
+          role: s.role === "leader" || s.role === "viewer" ? s.role : "engineer",
           sharedRepo: s.sharedRepo || "",
         };
       }
@@ -417,12 +418,12 @@
       if (state.fileSha) localStorage.setItem(LS_SHA, state.fileSha);
     } catch (e) {
       console.warn("localStorage cache failed", e);
-      if (!cacheWarned) {
+      if (!cacheWarned && canEdit()) {
         cacheWarned = true;
         toast("Browser storage is full or blocked — changes are NOT cached locally. Save to GitHub or use Backup now.", "error");
       }
     }
-    setDirty(true);
+    setDirty(canEdit());
   }
   // Keep a copy of the current data before anything replaces it wholesale.
   function backupCurrentData() {
@@ -577,7 +578,7 @@
     return (done && done.id) || "status-done";
   }
   function markTaskDone(task) {
-    if (!task) return false;
+    if (!task || guardEdit()) return false;
     task.statusId = doneStatusId();
     task.doneDate = todayStr();
     task.updatedAt = nowIso();
@@ -1852,8 +1853,41 @@
   function sharedRepoName() {
     return state.settings.sharedRepo || DEFAULT_REPO + "-shared";
   }
+  function isViewer() {
+    return state.settings.role === "viewer";
+  }
+  // Team view (every engineer on screen): an unlocked leader with an Engineer ID, or an unlocked viewer.
   function isLeader() {
-    return state.settings.role === "leader" && leaderUnlocked && !!myEngineerId();
+    return leaderUnlocked && ((state.settings.role === "leader" && !!myEngineerId()) || isViewer());
+  }
+  // Only engineers and leaders who have their own repo may change data. Viewers never can.
+  function canEdit() {
+    if (isViewer()) return false;
+    if (!myEngineerId()) return false;
+    if (isLeader()) return state.ownRepoOk === true;
+    return true;
+  }
+  function readOnlyReason() {
+    if (isViewer()) return "Viewer mode is read-only.";
+    if (!myEngineerId()) return "Set your Engineer ID in Settings before making changes.";
+    if (state.ownRepoOk === null || state.ownRepoOk === undefined) return "Checking your repo — try again in a moment.";
+    return "The team view is read-only for you: your own repo (" + engineerRepo(myEngineerId()) + ") is missing or your token cannot reach it.";
+  }
+  // Returns true (and explains why) when the current user may not change data.
+  function guardEdit() {
+    if (canEdit()) return false;
+    toast(readOnlyReason(), "error");
+    return true;
+  }
+  async function checkOwnRepo() {
+    if (!(state.settings.role === "leader" && leaderUnlocked && myEngineerId() && state.settings.pat)) return;
+    try {
+      state.ownRepoOk = await repoAccessible(engineerRepo(myEngineerId()));
+    } catch (_) {
+      state.ownRepoOk = false;
+    }
+    updateLeaderUi();
+    render();
   }
   function lockEngineerId() {
     if (myEngineerId() && !state.settings.engineerIdLocked) {
@@ -1973,7 +2007,7 @@
   }
   // Shared lists (statuses, task/project/structure types) live in the shared repo so the team stays consistent.
   async function overlaySharedSettings(json) {
-    if (!myEngineerId() || !state.settings.pat) return;
+    if ((!myEngineerId() && !isViewer()) || !state.settings.pat) return;
     try {
       const f = await ghReadFile(sharedRepoName(), SHARED_SETTINGS);
       if (!f) return;
@@ -2040,8 +2074,8 @@
   }
   // Soft lock only: it keeps engineers out of the leader view but is not strong security.
   async function unlockLeader() {
-    if (!state.settings.pat || !myEngineerId()) {
-      toast("Set the token and your Engineer ID in Settings first.", "error");
+    if (!state.settings.pat || (!myEngineerId() && !isViewer())) {
+      toast(isViewer() ? "Paste the token in Settings first." : "Set the token and your Engineer ID in Settings first.", "error");
       return false;
     }
     let team;
@@ -2052,6 +2086,10 @@
       return false;
     }
     // Anyone on the team who knows the password may open the leader view.
+    if ((!team || !team.pw) && isViewer()) {
+      toast("No leader password has been set up yet. Ask the team leader to set it first.", "error");
+      return false;
+    }
     if (!team || !team.pw) {
       const pw = await askPassword("Create leader password", "Whoever knows this password can open the team-wide view. It is a soft lock, not strong security.", true);
       if (!pw) return false;
@@ -2097,7 +2135,8 @@
       sessionStorage.setItem(LS_LEADER, "1");
     } catch (_) {}
     updateLeaderUi();
-    toast("Leader view unlocked. Click Load to read every engineer's repo.", "success");
+    toast((isViewer() ? "Team view unlocked (read-only)." : "Leader view unlocked.") + " Click Load to read every engineer's repo.", "success");
+    checkOwnRepo();
     return true;
   }
   function lockLeader() {
@@ -2107,6 +2146,7 @@
     } catch (_) {}
     state.engFilter = "all";
     forgetTeamState();
+    state.ownRepoOk = null;
     updateLeaderUi();
     render();
     toast("Leader view locked. Load your own data before saving.", "success");
@@ -2114,11 +2154,18 @@
   function updateLeaderUi() {
     const btn = document.getElementById("btn-leader");
     const sel = document.getElementById("eng-filter");
-    const isLeaderRole = state.settings.role === "leader" && !!myEngineerId();
+    const isLeaderRole = (state.settings.role === "leader" && !!myEngineerId()) || isViewer();
     if (btn) {
       btn.classList.toggle("hidden", !isLeaderRole);
-      btn.textContent = leaderUnlocked ? "Lock leader view" : "Unlock leader view";
+      const what = isViewer() ? "team view" : "leader view";
+      btn.textContent = (leaderUnlocked ? "Lock " : "Unlock ") + what;
     }
+    const ro = document.getElementById("ro-badge");
+    if (ro) {
+      ro.classList.toggle("hidden", canEdit());
+      ro.title = readOnlyReason();
+    }
+    if (document.body) document.body.classList.toggle("read-only", !canEdit());
     if (sel) {
       const show = isLeader();
       sel.classList.toggle("hidden", !show);
@@ -2147,12 +2194,18 @@
     try {
       const team = await loadTeam();
       const ids = new Set(((team && team.engineers) || []).map((e) => e.id));
-      ids.add(myEngineerId());
+      if (myEngineerId()) ids.add(myEngineerId());
       const projects = [];
       const tasks = [];
       const bases = {};
       const engSettings = {};
       let mine = null;
+      if (!myEngineerId()) {
+        // Viewer: no repo of their own; just the shared lists on top of local preferences.
+        const json = { settings: state.data.settings };
+        await overlaySharedSettings(json);
+        mine = normalizeData(json);
+      }
       const noAccess = [];
       const counts = {};
       for (const id of ids) {
@@ -2206,6 +2259,7 @@
       state.bases = bases;
       state.engSettings = engSettings;
       state.teamLoaded = true;
+      if (state.settings.role === "leader" && myEngineerId()) state.ownRepoOk = await repoAccessible(engineerRepo(myEngineerId()));
       state.loadedThisSession = true;
       cacheDataLocally();
       setDirty(false);
@@ -2343,9 +2397,20 @@
     }
   }
   function loadFromGithub() {
-    return isLeader() ? loadAllFromGithub() : loadEngineerData();
+    if (isLeader()) return loadAllFromGithub();
+    if (isViewer()) {
+      toast("Viewer: click Unlock team view and enter the leader password first.", "error");
+      return Promise.resolve(false);
+    }
+    if (!myEngineerId()) {
+      toast("Set your Engineer ID in Settings first — it picks your own private repo.", "error");
+      return Promise.resolve(false);
+    }
+    return loadEngineerData();
   }
   function saveToGithub() {
+    // Without an Engineer ID the old code saved into the public app repo; never do that.
+    if (guardEdit()) return Promise.resolve(false);
     return isLeader() ? saveAllToGithub() : saveEngineerData();
   }
   // Company-wide letter numbers: reserved in the shared repo before the letter is issued.
@@ -2393,9 +2458,10 @@
     }
     const team = await loadTeam();
     const ids = new Set(((team && team.engineers) || []).map((e) => e.id));
-    ids.add(me);
-    const projects = (state.data.projects || []).filter((r) => !r._eng || r._eng === me).map((r) => Object.assign({}, r, { _eng: me }));
-    const tasks = (state.data.tasks || []).filter((r) => !r._eng || r._eng === me).map((r) => Object.assign({}, r, { _eng: me }));
+    if (me) ids.add(me);
+    const mineOnly = (list) => (me ? (list || []).filter((r) => !r._eng || r._eng === me).map((r) => Object.assign({}, r, { _eng: me })) : []);
+    const projects = mineOnly(state.data.projects);
+    const tasks = mineOnly(state.data.tasks);
     const engSettings = {};
     for (const id of ids) {
       if (id === me) continue;
@@ -2489,6 +2555,7 @@
         if (!json || typeof json !== "object" || (!Array.isArray(json.projects) && !Array.isArray(json.tasks))) {
           throw new Error("not a Lumax backup (no projects/tasks list). Nothing was changed.");
         }
+        if (guardEdit()) return;
         if (!confirmDiscardUnsaved("Importing this file")) return;
         const imported = normalizeData(json);
         backupCurrentData();
@@ -2530,6 +2597,7 @@
     updateLeaderUi();
     if (state.settings.pat) fetchGithubUser();
     render();
+    checkOwnRepo();
   }
 
   function updateAuthBadge() {
@@ -3000,6 +3068,7 @@
 
   // ---------- Render shell ----------
   function render() {
+    if (document.body) document.body.classList.toggle("read-only", !canEdit());
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       const active =
         btn.dataset.view === state.view ||
@@ -3736,7 +3805,7 @@
       `</div>` +
       `<div class="detail-actions" style="margin-top:0.85rem">` +
       `<button type="button" class="btn btn-sm" id="btn-new-task">+ Task</button>` +
-      `<button type="button" class="btn btn-secondary btn-sm" id="btn-edit-project">Edit project</button>` +
+      `<button type="button" class="btn btn-secondary btn-sm" id="btn-edit-project">${canEdit() ? "Edit project" : "View project"}</button>` +
       `<button type="button" class="btn btn-sm" id="btn-issue-scf"${issueEnabled ? "" : " disabled"} title="${escapeHtml(issueEnabled ? "Create Structural Conformance Letter (LMX-SCL-YYYY-NNN)" : blockers.length ? "Missing: " + blockers.join(", ") : "Already issued")}">Create SC Letter</button>` +
       (issued && p.sclUndoSnapshot
         ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-undo-scf" title="Restore pre-issue snapshot">Undo Create SC Letter</button>`
@@ -3763,6 +3832,7 @@
     const prevBtn = root.querySelector("#btn-preview-scf");
     if (prevBtn) prevBtn.addEventListener("click", () => openScfPreview(p));
     root.querySelector("#btn-archive").addEventListener("click", () => {
+      if (guardEdit()) return;
       p.archived = !p.archived;
       p.updatedAt = nowIso();
       cacheDataLocally();
@@ -3844,6 +3914,7 @@
       col.addEventListener("drop", (e) => {
         e.preventDefault();
         col.classList.remove("drop-hover");
+        if (guardEdit()) return;
         const taskId = e.dataTransfer.getData("text/plain");
         const t = getTask(taskId);
         const statusId = col.dataset.status;
@@ -3873,6 +3944,7 @@
         e.preventDefault();
         e.stopPropagation();
         tab.classList.remove("drop-hover");
+        if (guardEdit()) return;
         const taskId = e.dataTransfer.getData("text/plain");
         const t = getTask(taskId);
         if (!t || t.projectId !== project.id) {
@@ -4037,6 +4109,23 @@
         firstEl.focus();
       }
     };
+  }
+  // Read-only users can open a record to read it, but nothing in the form can be changed.
+  function lockOverlayForm() {
+    const panel = document.querySelector("#overlay .panel");
+    if (!panel) return;
+    panel.querySelectorAll("input, select, textarea").forEach((x) => (x.disabled = true));
+    panel.querySelectorAll("button").forEach((b) => {
+      const close = /cancel|close/i.test(b.id || "") || /^(cancel|close)$/i.test((b.textContent || "").trim());
+      if (close) {
+        b.textContent = "Close";
+        b.onclick = closeOverlay;
+      } else b.style.display = "none";
+    });
+    const note = document.createElement("p");
+    note.className = "hint read-only-note";
+    note.textContent = "Read-only — " + readOnlyReason();
+    panel.insertBefore(note, panel.children[1] || null);
   }
   function closeOverlay() {
     if (overlayCloseHook) {
@@ -4346,7 +4435,7 @@
     }
   }
   async function issueConformance(project) {
-    if (!project) return;
+    if (!project || guardEdit()) return;
     const blockers = sclGate(project);
     if (blockers.length) {
       toast("Cannot create SC Letter — missing: " + blockers.join("; "), "error");
@@ -4444,6 +4533,7 @@
   }
 
   function undoConformance(project) {
+    if (guardEdit()) return;
     if (!project || !project.sclUndoSnapshot) {
       toast("Nothing to undo for this SC Letter", "error");
       return;
@@ -4651,7 +4741,11 @@
         }</p></div>` +
         `<div class="form-group" id="set-repo-wrap"${s.engineerId ? ' style="display:none"' : ""}><label>Repository (legacy single repo)</label><input id="set-repo" value="${escapeHtml(s.repo)}" /></div>` +
         `<div class="form-group"><label>Shared repo (settings, letter numbers, team list)</label><input id="set-shared-repo" value="${escapeHtml(s.sharedRepo || DEFAULT_REPO + "-shared")}" /></div>` +
-        `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="set-role-leader"${s.role === "leader" ? " checked" : ""}/> Team leader view (anyone with the leader password can unlock it to see every engineer's projects and tasks)</label></div>` +
+        `<div class="form-group"><label>Role</label><select id="set-role">` +
+        `<option value="engineer"${s.role === "engineer" || !s.role ? " selected" : ""}>Engineer — my own projects and tasks</option>` +
+        `<option value="leader"${s.role === "leader" ? " selected" : ""}>Team leader — see and edit everyone's work (needs Engineer ID, own repo and leader password)</option>` +
+        `<option value="viewer"${s.role === "viewer" ? " selected" : ""}>Viewer — see everyone's work, read-only (needs leader password, no repo)</option>` +
+        `</select><p class="hint">Viewers don't need an Engineer ID or a repo. Only engineers and leaders with their own repo can make changes.</p></div>` +
         `<div class="form-group"><label>Personal Access Token (PAT)</label>` +
         `<input id="set-pat" type="text" class="secret-input" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" value="" placeholder="${s.pat ? "•••• token saved — paste to replace" : "ghp_… or github_pat_…"}" />` +
         `<p class="hint">Stored only in this browser's localStorage — never written to projects.json. Each engineer uses their own PAT.</p>` +
@@ -4761,7 +4855,7 @@
     document.getElementById("set-add-status").onclick = () =>
       addStatusRow({ id: uid("status"), name: "", color: "#6b7c93", category: "todo" });
 
-    if (s.engineerId && !isLeader()) {
+    if (!(isLeader() && canEdit())) {
       [box, ttBox, ptBox, stTypeBox].forEach((b) => b.querySelectorAll("input,select,button").forEach((x) => (x.disabled = true)));
       ["set-add-status", "set-add-task-type", "set-add-project-type", "set-add-structure-type"].forEach((id) => {
         const b = document.getElementById(id);
@@ -4834,9 +4928,9 @@
       state.settings.repo = repoNext;
       state.settings.engineerId = engIdNext;
       state.settings.sharedRepo = document.getElementById("set-shared-repo").value.trim();
-      const wasLeader = state.settings.role === "leader";
-      state.settings.role = document.getElementById("set-role-leader").checked ? "leader" : "engineer";
-      if (state.settings.role !== "leader" && leaderUnlocked) {
+      const prevRole = state.settings.role;
+      state.settings.role = ["leader", "viewer"].includes(document.getElementById("set-role").value) ? document.getElementById("set-role").value : "engineer";
+      if (state.settings.role !== prevRole && leaderUnlocked) {
         leaderUnlocked = false;
         try {
           sessionStorage.removeItem(LS_LEADER);
@@ -4890,7 +4984,9 @@
       updateAuthBadge();
       updateLeaderUi();
       toast(localSaveHint("Settings saved"), "success");
-      if (state.settings.role === "leader" && !wasLeader && !leaderUnlocked) unlockLeader();
+      state.ownRepoOk = null;
+      if (state.settings.role !== "engineer" && !leaderUnlocked) unlockLeader();
+      else checkOwnRepo();
       if (state.settings.pat) fetchGithubUser();
       else {
         state.githubUser = null;
@@ -5003,6 +5099,10 @@
         `<button type="button" class="btn" id="pf-save">Save</button>` +
         `</div></div>`
     );
+    if (!canEdit()) {
+      lockOverlayForm();
+      return;
+    }
 
     const drawBox = document.getElementById("pf-drawings");
     const custBox = document.getElementById("pf-customs");
@@ -5198,6 +5298,10 @@
         `<button type="button" class="btn" id="ph-save">Save</button>` +
         `</div></div>`
     );
+    if (!canEdit()) {
+      lockOverlayForm();
+      return;
+    }
     const list = document.getElementById("ph-list");
     function addRow(id, name) {
       const row = document.createElement("div");
@@ -5310,6 +5414,10 @@
         `<button type="button" class="btn" id="tf-save">Save</button>` +
         `</div></div>`
     );
+    if (!canEdit()) {
+      lockOverlayForm();
+      return;
+    }
 
     function refreshPhases() {
       const pid = document.getElementById("tf-project").value || null;

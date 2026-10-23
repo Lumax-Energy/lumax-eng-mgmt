@@ -133,5 +133,7 @@ This app repo is **public code only** — never commit real project data here.
 - **Settings → Engineer ID** (e.g. `lucian-du-plessis`) selects your repo. It locks after the first Save/Load; the display name can still change.
 - One token with Contents read/write on all these repos is shared.
 - **Team leader view:** anyone can tick "Team leader view" in Settings, then *Unlock leader view* with the leader password (password is a soft lock, not strong security). Load then reads every engineer's repo; Save writes each repo that changed. Use the Engineer filter to focus on one person.
+- **Viewer:** choose Role → Viewer in Settings (no Engineer ID or repo needed), unlock with the leader password, then Load. Everything is read-only; Export Excel and Backup still cover every engineer.
+- **Who can edit:** only engineers and team leaders with an Engineer ID whose own repo exists. Leaders without a repo get a read-only team view. Saving without an Engineer ID is blocked (it would otherwise target this public repo).
 - Shared lists (statuses, task/project/structure types) can only be edited by the leader.
 - SC letter numbers are reserved in `letters.json` before a letter is issued, so two engineers can never get the same number.
