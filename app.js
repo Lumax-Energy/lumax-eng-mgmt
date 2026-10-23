@@ -1905,6 +1905,14 @@
     const meta = await r.json();
     return { sha: meta.sha, text: await readRemoteText(meta, repo, path) };
   }
+  // GitHub answers 404 both for "file not there yet" and for "this token can't see the repo".
+  async function repoAccessible(repo) {
+    const r = await fetch("https://api.github.com/repos/" + encodeURIComponent(state.settings.owner) + "/" + encodeURIComponent(repo), {
+      headers: ghHeaders(),
+      cache: "no-store",
+    });
+    return r.ok;
+  }
   async function ghWriteFile(repo, path, text, sha, message) {
     const body = { message, content: btoa(unescape(encodeURIComponent(text))), branch: "main" };
     if (sha) body.sha = sha;
@@ -2145,8 +2153,11 @@
       const bases = {};
       const engSettings = {};
       let mine = null;
+      const noAccess = [];
+      const counts = {};
       for (const id of ids) {
         const f = await ghReadFile(engineerRepo(id), DATA_PATH);
+        if (!f && id !== myEngineerId() && !(await repoAccessible(engineerRepo(id)))) noAccess.push(id);
         if (id === myEngineerId()) {
           // No file of my own yet: keep the settings in this browser rather than resetting to SAMPLE defaults.
           const json = f ? JSON.parse(f.text) : { settings: state.data.settings };
@@ -2160,8 +2171,17 @@
         const d = id === myEngineerId() ? mine : normalizeData(JSON.parse(f.text));
         bases[id] = { sha: f.sha, snapshot: JSON.parse(JSON.stringify(d)) };
         engSettings[id] = d.settings;
+        counts[id] = d.projects.length + " projects, " + d.tasks.length + " tasks";
         d.projects.forEach((p) => projects.push(Object.assign({}, p, { _eng: id })));
         d.tasks.forEach((t) => tasks.push(Object.assign({}, t, { _eng: id })));
+      }
+      if (noAccess.length) {
+        toast(
+          "Load stopped: your token cannot read " + noAccess.map(engineerRepo).join(", ") +
+            ". Give the token access to those repos (GitHub → Settings → Developer settings → Personal access tokens, add the repos with Contents: Read and write), then Load again. Nothing was changed.",
+          "error"
+        );
+        return false;
       }
       // Record ids must be unique across the team, or edits/deletes could hit the wrong engineer's record.
       const dupes = [projects, tasks].map((list) => {
@@ -2192,7 +2212,11 @@
       markLastSync("Load (all)");
       updateLeaderUi();
       render();
-      toast("Loaded " + ids.size + " engineer repo(s)", "success", undoAction());
+      toast(
+        "Loaded " + ids.size + " engineer repo(s): " + [...ids].map((i) => i + " (" + (counts[i] || "no data yet") + ")").join(" · "),
+        "success",
+        undoAction()
+      );
       return true;
     } catch (e) {
       toast("Leader load error: " + e.message, "error");
@@ -2376,7 +2400,10 @@
     for (const id of ids) {
       if (id === me) continue;
       const f = await ghReadFile(engineerRepo(id), DATA_PATH);
-      if (!f) continue;
+      if (!f) {
+        if (!(await repoAccessible(engineerRepo(id)))) throw new Error("your token cannot read " + engineerRepo(id));
+        continue;
+      }
       const d = normalizeData(JSON.parse(f.text));
       engSettings[id] = d.settings;
       d.projects.forEach((p) => projects.push(Object.assign({}, p, { _eng: id })));
