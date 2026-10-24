@@ -662,8 +662,9 @@
     return getStatuses().find((s) => s.id === id) || null;
   }
   function statusIsDone(statusId) {
-    const s = getStatus(statusId);
-    return s && s.category === "done";
+    // A status the team list dropped keeps the category it had, so closed work on it stays closed.
+    const s = getStatus(statusId) || (statusId ? retiredEntry("taskStatuses", statusId) : null);
+    return !!s && s.category === "done";
   }
   function normalizeDesignScope(v) {
     const o = v && typeof v === "object" ? v : {};
@@ -1068,16 +1069,18 @@
     }
     return DEFAULT_TASK_TYPES.map((t) => ({ ...t }));
   }
-  // A type/status id a task still uses after the team list dropped it. In team view another engineer's
-  // own list may still name it; otherwise the id is the best label we have.
+  // A type/status id a task still uses after the team list dropped it. Its name (and a status's category)
+  // comes from the retired names the data keeps (settings.retiredTaskTypes/retiredTaskStatuses, display only),
+  // or in team view from an engineer's own lists; otherwise the id is the best label we have.
   function retiredEntry(key, id) {
+    const rk = key === "taskTypes" ? "retiredTaskTypes" : "retiredTaskStatuses";
+    const sources = [(state.data && state.data.settings) || {}];
+    Object.keys(state.engSettings || {}).forEach((eng) => sources.push(state.engSettings[eng] || {}));
     let found = null;
-    Object.keys(state.engSettings || {}).some((eng) => {
-      const list = (state.engSettings[eng] || {})[key];
-      found = (Array.isArray(list) && list.find((x) => x && x.id === id)) || null;
-      return !!found;
-    });
-    return { id, name: String((found && found.name) || id), retired: true };
+    sources.some((s) => [s[rk], s[key]].some((list) => !!(found = (Array.isArray(list) && list.find((x) => x && x.id === id)) || null)));
+    const e = { id, name: String((found && found.name) || id), retired: true };
+    if (key === "taskStatuses") e.category = (found && found.category) || null;
+    return e;
   }
   // The lists plus any id the given tasks still use, so those tasks stay visible in the board, filters and Excel.
   // New-task dropdowns and the Settings lists keep using getTaskTypes()/getStatuses().
@@ -1097,7 +1100,8 @@
     (tasks || state.data.tasks || []).forEach((t) => {
       if (!t || !t.statusId || seen.has(t.statusId)) return;
       seen.add(t.statusId);
-      list.push(Object.assign(retiredEntry("taskStatuses", t.statusId), { color: "#9aa5b1", category: null }));
+      // Grey column, but a known category is kept so a retired done status still counts as done.
+      list.push(Object.assign(retiredEntry("taskStatuses", t.statusId), { color: "#9aa5b1" }));
     });
     return list;
   }
@@ -1572,6 +1576,18 @@
       delete p.tasks;
     });
 
+    // Names of types/statuses the team list dropped but this file's tasks still use: for display only,
+    // never offered for new tasks and never pushed to the shared list. Unused ones are forgotten.
+    const usedTypes = new Set(data.tasks.map((t) => t.type));
+    const usedStatuses = new Set(data.tasks.map((t) => t.statusId));
+    const retiredTypes = retiredNameList(settingsIn.retiredTaskTypes, taskTypes, usedTypes, (x) => ({
+      id: safeId(String(x.id).trim()),
+      name: String(x.name || "").trim() || String(x.id),
+    }));
+    const retiredStatuses = retiredNameList(settingsIn.retiredTaskStatuses, taskStatuses, usedStatuses, normalizeStatus);
+    if (retiredTypes.length) data.settings.retiredTaskTypes = retiredTypes;
+    if (retiredStatuses.length) data.settings.retiredTaskStatuses = retiredStatuses;
+
     // Keep any project-used structure types selectable (extras beyond defaults)
     const structSet = new Set(data.settings.structureTypes);
     data.projects.forEach((p) => {
@@ -1587,6 +1603,19 @@
     return data;
   }
 
+  // Entries of a retired-name list that are not in the active list and that a task still uses (first one wins).
+  function retiredNameList(list, active, used, norm) {
+    const seen = new Set((active || []).map((x) => x.id));
+    const out = [];
+    (Array.isArray(list) ? list : []).forEach((x) => {
+      if (!x || typeof x !== "object" || !x.id) return;
+      const e = norm(x);
+      if (!e.id || seen.has(e.id) || !used.has(e.id)) return;
+      seen.add(e.id);
+      out.push(e);
+    });
+    return out;
+  }
   function normalizeStatus(s) {
     const cat = s.category;
     const category = cat === "todo" || cat === "doing" || cat === "done" ? cat : null;
@@ -2167,21 +2196,22 @@
       const f = await ghReadFile(sharedRepoName(), SHARED_SETTINGS);
       if (!f) return;
       const sh = JSON.parse(f.text);
-      json.settings = json.settings && typeof json.settings === "object" ? json.settings : {};
+      // A copy: for a viewer (or a leader without a file yet) json.settings is the live state.data.settings.
+      json.settings = json.settings && typeof json.settings === "object" ? Object.assign({}, json.settings) : {};
       const used = usedTaskRefs(json);
       SHARED_KEYS.forEach((k) => {
         if (!(Array.isArray(sh[k]) && sh[k].length)) return;
-        let next = sh[k];
-        // The shared list wins, but a type/status this file's tasks still use keeps its own entry (name, colour)
-        // so a shorter shared list never relabels or hides those tasks.
+        // The shared list wins. A type/status this file's tasks still use but the team dropped keeps only its
+        // name (and a status's colour/category) in a separate retired list: its tasks are never relabelled or
+        // hidden, but it is not offered for new tasks and Save all never copies it back into the team list.
         if (k === "taskTypes" || k === "taskStatuses") {
+          const rk = k === "taskTypes" ? "retiredTaskTypes" : "retiredTaskStatuses";
           const inUse = k === "taskTypes" ? used.types : used.statuses;
           const shared = new Set(sh[k].map((x) => safeId(x && x.id)));
-          const own = Array.isArray(json.settings[k]) ? json.settings[k] : [];
-          const keep = own.filter((x) => x && x.id && inUse.has(safeId(x.id)) && !shared.has(safeId(x.id)));
-          if (keep.length) next = sh[k].concat(keep);
+          const own = (Array.isArray(json.settings[k]) ? json.settings[k] : []).concat(Array.isArray(json.settings[rk]) ? json.settings[rk] : []);
+          json.settings[rk] = own.filter((x) => x && x.id && inUse.has(safeId(x.id)) && !shared.has(safeId(x.id)));
         }
-        json.settings[k] = next;
+        json.settings[k] = sh[k];
       });
     } catch (e) {
       toast("Could not read shared settings (" + e.message + ") — using your saved copy.", "error");
@@ -2189,6 +2219,8 @@
   }
   async function pushSharedSettings() {
     if (!isLeader()) return;
+    // Only the active lists (as loaded from the team list, plus the leader's own Settings edits) are pushed;
+    // the retired name lists stay in each engineer's own file.
     const st = state.data.settings || {};
     await ghUpdateJson(
       sharedRepoName(),
@@ -5094,15 +5126,19 @@
       const listsEditable = isLeader() && canEdit();
       // Tasks on a status the leader removed move only after an explicit OK. Tasks on a status that was
       // never in the list are left alone. Types never move tasks: a removed type just leaves the new-task list.
+      // Closed work stays closed: tasks on a removed done status go to the first remaining done status,
+      // the others to the first remaining open one (to the first status when none of that kind is left).
       const keptStatusIds = new Set(nextStatuses.map((x) => x.id));
-      const fallbackStatus = nextStatuses[0];
+      const firstDone = nextStatuses.find((x) => x.category === "done");
+      const firstOpen = nextStatuses.find((x) => x.category !== "done");
       const toMove = [];
       const moveLines = [];
       (listsEditable ? getStatuses() : []).forEach((st) => {
         if (keptStatusIds.has(st.id)) return;
         const users = (state.data.tasks || []).filter((t) => t.statusId === st.id);
         if (!users.length) return;
-        toMove.push(...users);
+        const target = (st.category === "done" ? firstDone : firstOpen) || nextStatuses[0];
+        users.forEach((t) => toMove.push({ t, target }));
         let line = users.length + (users.length === 1 ? " task uses '" : " tasks use '") + st.name + "'";
         if (isLeader()) {
           const by = {};
@@ -5112,9 +5148,10 @@
           });
           line += " (" + Object.keys(by).sort().map((e) => e + " " + by[e]).join(", ") + ")";
         }
-        moveLines.push(line + ".");
+        const reopens = st.category === "done" && target.category !== "done";
+        moveLines.push(line + ": move to '" + target.name + "'" + (reopens ? " (no done status is left, so they reopen)" : "") + ".");
       });
-      if (toMove.length && !window.confirm(moveLines.join("\n") + "\n\nOK = move them to '" + fallbackStatus.name + "'; Cancel = go back.")) {
+      if (toMove.length && !window.confirm(moveLines.join("\n") + "\n\nOK = move them as listed; Cancel = go back.")) {
         toast("Settings not saved — nothing was changed. Keep the status, or Save again and choose OK to move its tasks.", "error");
         return;
       }
@@ -5144,9 +5181,11 @@
       saveBrowserSettings();
       if (listsEditable) state.data.settings.taskStatuses = nextStatuses;
       const stamp = nowIso();
-      toMove.forEach((t) => {
-        t.statusId = fallbackStatus.id;
-        if (fallbackStatus.category === "done" && !t.doneDate) t.doneDate = todayStr();
+      toMove.forEach(({ t, target }) => {
+        t.statusId = target.id;
+        // Same rule as a board drop: a done status keeps (or sets) the completed date, any other clears it.
+        if (target.category === "done") t.doneDate = t.doneDate || todayStr();
+        else t.doneDate = null;
         t.updatedAt = stamp;
       });
       state.data.settings.myAssignee = document.getElementById("set-my-name").value.trim();
@@ -5161,8 +5200,20 @@
         address: document.getElementById("set-eng-addr").value.trim() || DEFAULT_ENGINEER.address,
         contact: document.getElementById("set-eng-contact").value.trim() || DEFAULT_ENGINEER.contact,
       };
-      // A removed type keeps its tasks as they are (shown as retired); it only leaves the new-task dropdown.
-      if (listsEditable) state.data.settings.taskTypes = nextTaskTypes;
+      if (listsEditable) {
+        // A removed type keeps its tasks as they are (shown as retired); it only leaves the new-task dropdown.
+        // Its name stays in the display-only retired list while tasks still use it; a re-added id leaves that list.
+        const cfg = state.data.settings;
+        const usedTypes = new Set((state.data.tasks || []).map((t) => t.type));
+        const usedStatuses = new Set((state.data.tasks || []).map((t) => t.statusId));
+        const retiredTypes = retiredNameList(getTaskTypes().concat(cfg.retiredTaskTypes || []), nextTaskTypes, usedTypes, (x) => ({ id: x.id, name: x.name }));
+        const retiredStatuses = retiredNameList(cfg.retiredTaskStatuses, nextStatuses, usedStatuses, (x) => Object.assign({}, x));
+        cfg.taskTypes = nextTaskTypes;
+        if (retiredTypes.length) cfg.retiredTaskTypes = retiredTypes;
+        else delete cfg.retiredTaskTypes;
+        if (retiredStatuses.length) cfg.retiredTaskStatuses = retiredStatuses;
+        else delete cfg.retiredTaskStatuses;
+      }
 
       const nextProjectTypes = [];
       ptBox.querySelectorAll(".dyn-row").forEach((row) => {
@@ -5186,7 +5237,8 @@
       closeOverlay();
       updateAuthBadge();
       updateLeaderUi();
-      toast(localSaveHint(toMove.length ? "Settings saved, " + toMove.length + " task(s) moved to " + fallbackStatus.name : "Settings saved"), "success");
+      const movedTo = [...new Set(toMove.map((x) => x.target.name))].join(" / ");
+      toast(localSaveHint(toMove.length ? "Settings saved, " + toMove.length + " task(s) moved to " + movedTo : "Settings saved"), "success");
       state.ownRepoOk = null;
       if (state.settings.role !== "engineer" && !leaderUnlocked) unlockLeader();
       else checkOwnRepo();

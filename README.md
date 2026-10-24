@@ -86,7 +86,7 @@ Chips also include: Clients · Engineer · Structure type · Structural Conforma
 
 Defaults (editable in Settings — add / edit / remove): RDN · Design check · Drawing · Eng task · Site visit · Calculation · Review · Coordination · Other.
 
-Load, Save and the task form never change a task's type or status. Removing a type only takes it out of the new-task list: its tasks keep it and show it as "(retired)". Removing a status that tasks still use asks first (with counts per engineer in team view) and moves those tasks to the first remaining status only on OK. A type or status that is not in the team list still gets its own board column, filter entry and Excel sheet/column.
+Load, Save and the task form never change a task's type or status. Removing a type only takes it out of the new-task list, for every engineer: its tasks keep it and show it as "(retired)". Removing a status that tasks still use asks first (with counts per engineer in team view) and moves those tasks only on OK: tasks on a removed done status go to the first remaining done status and keep their completed date, the others go to the first remaining open status and lose it. A type or status that is not in the team list still gets its own board column, filter entry and Excel sheet/column. While an engineer's own tasks still use a type or status the team list dropped, their file keeps its name (and a status's colour and done/open category) in `settings.retiredTaskTypes` / `settings.retiredTaskStatuses`. Those are for display only: they are never offered for new tasks and Save all never copies them back into the team list.
 
 Tasks view includes a **Structure type** dropdown (project `structureTypes` / task override).
 
