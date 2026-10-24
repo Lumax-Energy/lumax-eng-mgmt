@@ -533,6 +533,90 @@
       },
     };
   }
+  // Deletes get a targeted Undo that puts back only the deleted record (same id, _eng tag and
+  // updatedAt). Unlike restoreBackup it keeps every later edit, the merge base and the leader
+  // view's per-engineer state, so Save keeps working after an Undo.
+  function canUndoDelete(rec) {
+    if (!canEdit()) throw new Error(readOnlyReason());
+    const me = myEngineerId();
+    if (rec._eng && rec._eng !== me && !isLeader()) {
+      throw new Error("Cannot undo: that record belongs to " + rec._eng + ". Unlock the leader view and Load first.");
+    }
+  }
+  function deleteTask(taskId) {
+    if (guardEdit()) return null;
+    const idx = (state.data.tasks || []).findIndex((x) => x.id === taskId);
+    if (idx < 0) return null;
+    const removed = JSON.parse(JSON.stringify(state.data.tasks[idx]));
+    state.data.tasks.splice(idx, 1);
+    cacheDataLocally();
+    const undo = {
+      label: "Undo",
+      onClick: async () => {
+        canUndoDelete(removed);
+        if (getTask(removed.id)) return;
+        const rec = JSON.parse(JSON.stringify(removed));
+        if (rec.projectId && !getProject(rec.projectId)) {
+          rec.projectId = null;
+          rec.phaseId = null;
+        }
+        state.data.tasks.splice(Math.min(idx, state.data.tasks.length), 0, rec);
+        cacheDataLocally();
+        render();
+        toast(localSaveHint("Task restored"), "success");
+      },
+    };
+    toast(localSaveHint("Task deleted"), "success", undo);
+    return undo;
+  }
+  // Removes a project, unlinks its tasks (they become standalone) and voids its letter ref.
+  function deleteProject(projectId) {
+    if (guardEdit()) return null;
+    const idx = (state.data.projects || []).findIndex((x) => x.id === projectId);
+    if (idx < 0) return null;
+    const doomed = state.data.projects[idx];
+    const removed = JSON.parse(JSON.stringify(doomed));
+    let voided = null;
+    if (doomed.conformanceRef) {
+      const st = state.data.settings;
+      if (!Array.isArray(st.voidedLetters)) st.voidedLetters = [];
+      voided = { ref: doomed.conformanceRef, projectId, issuedAt: doomed.conformanceIssuedAt || null, voidedAt: nowIso() };
+      st.voidedLetters.push(voided);
+    }
+    const unlinked = [];
+    state.data.tasks.forEach((t) => {
+      if (t.projectId === projectId) {
+        t.projectId = null;
+        unlinked.push(t.id);
+      }
+    });
+    state.data.projects.splice(idx, 1);
+    cacheDataLocally();
+    const undo = {
+      label: "Undo",
+      onClick: async () => {
+        canUndoDelete(removed);
+        if (getProject(removed.id)) return;
+        state.data.projects.splice(Math.min(idx, state.data.projects.length), 0, JSON.parse(JSON.stringify(removed)));
+        // Re-link only tasks that are still standalone; one moved to another project since stays there.
+        unlinked.forEach((id) => {
+          const t = getTask(id);
+          if (t && !t.projectId) t.projectId = removed.id;
+        });
+        const list = voided && state.data.settings && state.data.settings.voidedLetters;
+        if (Array.isArray(list)) {
+          const same = (v) => v === voided || (v && v.ref === voided.ref && v.projectId === voided.projectId && v.voidedAt === voided.voidedAt);
+          const i = list.findIndex(same);
+          if (i >= 0) list.splice(i, 1);
+        }
+        cacheDataLocally();
+        render();
+        toast(localSaveHint("Project restored"), "success");
+      },
+    };
+    toast(localSaveHint("Project deleted"), "success", undo);
+    return undo;
+  }
   function confirmDiscardUnsaved(what) {
     if (!dirty) return true;
     const ok = window.confirm(
@@ -5142,21 +5226,9 @@
     if (isEdit) {
       document.getElementById("pf-delete").onclick = () => {
         if (!confirm("Delete this project and unlink its tasks (tasks become standalone)? You can Undo right afterwards.")) return;
-        backupCurrentData();
-        const doomed = getProject(projectId);
-        if (doomed && doomed.conformanceRef) {
-          const st = state.data.settings;
-          if (!Array.isArray(st.voidedLetters)) st.voidedLetters = [];
-          st.voidedLetters.push({ ref: doomed.conformanceRef, projectId, issuedAt: doomed.conformanceIssuedAt || null, voidedAt: nowIso() });
-        }
-        state.data.tasks.forEach((t) => {
-          if (t.projectId === projectId) t.projectId = null;
-        });
-        state.data.projects = state.data.projects.filter((x) => x.id !== projectId);
-        cacheDataLocally();
+        deleteProject(projectId);
         closeOverlay();
         setView("projects");
-        toast("Project deleted", "success", undoAction());
       };
     }
 
@@ -5466,12 +5538,10 @@
     bindMarkDoneButtons(document.getElementById("overlay"));
     if (isEdit) {
       document.getElementById("tf-delete").onclick = () => {
-        if (!confirm("Delete this task?")) return;
-        state.data.tasks = state.data.tasks.filter((x) => x.id !== taskId);
-        cacheDataLocally();
+        if (!confirm("Delete this task? You can Undo right afterwards.")) return;
+        deleteTask(taskId);
         closeOverlay();
         render();
-        toast("Task deleted", "success");
       };
     }
 
