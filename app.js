@@ -7,8 +7,9 @@
   if (window.__LUMAX_ENG_MGMT_BOOTED) return;
   window.__LUMAX_ENG_MGMT_BOOTED = true;
 
-  // One key holds a tab's whole local copy {v, sha, dirty, data, tab, at, id, parent}, written in a
-  // single setItem so data, sha and the unsaved flag can never come from different tabs or moments.
+  // One key holds a tab's whole local copy {v, sha, dirty, data, owner, repo, tab, at, id, parent}, written
+  // in a single setItem so data, sha and the unsaved flag can never come from different tabs or moments.
+  // owner/repo name the GitHub repo that sha belongs to; it is used only while the settings still name it.
   const LS_SYNC = "lumax-eng-mgmt-sync";
   // Old separate keys: read once to migrate into LS_SYNC, then removed.
   const LS_DATA = "lumax-eng-mgmt-data";
@@ -210,7 +211,7 @@
     done: "status-done",
   };
 
-  const BOOT_SNAP = readLocalSnapshot();
+  const BOOT_SNAP = readLocalSnapshot(loadBrowserSettings());
   // Id of the snapshot this tab last wrote or adopted; another tab's write that names it as its
   // parent was made on top of everything this tab has, so adopting it cannot lose anything.
   let lastSnapId = BOOT_SNAP.id;
@@ -489,11 +490,23 @@
     const sha = state.fileSha || null;
     if (storedBaseSha() !== sha) writeBase();
     const id = uid("snap");
-    localStorage.setItem(
-      LS_SYNC,
-      JSON.stringify({ v: 1, sha, dirty: !!dirty, data: state.data, tab: TAB_ID, at: nowIso(), id, parent: lastSnapId || null })
-    );
+    const text = JSON.stringify({
+      v: 1,
+      sha,
+      dirty: !!dirty,
+      data: state.data,
+      owner: state.settings.owner,
+      repo: state.settings.repo,
+      tab: TAB_ID,
+      at: nowIso(),
+      id,
+      parent: lastSnapId || null,
+    });
+    // Set before the write: if it fails, memory is ahead of every stored snapshot and this id is in
+    // none of them, so no other tab's write can claim this tab as its parent (and be adopted over
+    // edits that exist only here). A dirty tab then goes stale instead.
     lastSnapId = id;
+    localStorage.setItem(LS_SYNC, text);
     // The start-up migration could not write; their content is in this snapshot now.
     if (legacyKeysPending) {
       legacyKeysPending = false;
@@ -502,28 +515,40 @@
       } catch (_) {}
     }
   }
-  // Reads the snapshot (moving the old separate keys into it once). Never throws.
-  function readLocalSnapshot() {
+  // A snapshot's sha is the version of the repo it was written for. A tab still on old settings (after
+  // another tab changed the Engineer ID or repo) can leave one for its old repo behind.
+  function snapIsForRepo(snap, settings) {
+    return !!snap && !!settings && snap.owner === settings.owner && snap.repo === settings.repo;
+  }
+  // Reads the snapshot (moving the old separate keys into it once). Never throws. A snapshot written
+  // for another repo than `settings` name (or without a repo) keeps its data but not its sha or base,
+  // so Save checks GitHub first instead of sending another repo's sha; `foreign` says so.
+  function readLocalSnapshot(settings) {
     let snap = null;
     try {
       snap = JSON.parse(localStorage.getItem(LS_SYNC) || "null");
     } catch (_) {}
     if (!snap || typeof snap !== "object") snap = null;
-    const out = migrateOldKeys(snap) || { v: 1, sha: null, dirty: false, data: null, id: null };
+    const found = migrateOldKeys(snap, settings);
+    const out = found || { v: 1, sha: null, dirty: false, data: null, id: null };
+    const foreign = !!found && !snapIsForRepo(found, settings);
+    const sha = foreign ? null : out.sha || null;
     return {
       data: out.data && typeof out.data === "object" ? out.data : null,
-      sha: out.sha || null,
+      sha,
       dirty: !!out.dirty,
-      base: storedBaseFor(out.sha || null),
+      base: storedBaseFor(sha),
       id: out.id || null,
       note: out.note || "",
       pending: !!out.pending,
+      foreign,
     };
   }
   // Old layout: data, sha and the unsaved flag in three keys written at different times, so after a
   // reload they could come from different tabs. Their merge base is not trusted (dropped), so a
   // conflicting Save asks before merging. The old keys go only once LS_SYNC holds their content.
-  function migrateOldKeys(current) {
+  // They are taken to belong to the repo the stored settings name now.
+  function migrateOldKeys(current, settings) {
     let raw, sha, oldDirty;
     try {
       raw = localStorage.getItem(LS_DATA);
@@ -559,7 +584,18 @@
       } else current = null;
     }
     if (!current) {
-      snap = { v: 1, sha: sha || null, dirty: oldDirty, data, tab: TAB_ID, at: nowIso(), id: uid("snap"), parent: null };
+      snap = {
+        v: 1,
+        sha: sha || null,
+        dirty: oldDirty,
+        data,
+        owner: settings && settings.owner,
+        repo: settings && settings.repo,
+        tab: TAB_ID,
+        at: nowIso(),
+        id: uid("snap"),
+        parent: null,
+      };
       try {
         localStorage.removeItem(LS_BASE);
         localStorage.setItem(LS_SYNC, JSON.stringify(snap));
@@ -640,13 +676,15 @@
     if (!snap || typeof snap !== "object" || snap.tab === TAB_ID) return;
     // Written on top of this tab's latest snapshot: it already holds everything this tab has.
     const builtOnMine = !!snap.parent && snap.parent === lastSnapId;
-    const busy = state.teamLoaded || !!state.syncOp || overlayOpen() || !sameRepoAsStored();
+    // A copy written for another repo (a tab on old settings) is never taken over: its sha would be sent to ours.
+    const busy = state.teamLoaded || !!state.syncOp || overlayOpen() || !sameRepoAsStored() || !snapIsForRepo(snap, state.settings);
     if (!busy && (builtOnMine || !dirty)) {
       adoptOtherTab(snap);
       return;
     }
     if (roleCanEdit()) markStale();
   }
+  // Only for a snapshot of this tab's own repo (onOtherTabWrite checks), so its sha and base apply here.
   function adoptOtherTab(snap) {
     state.data = normalizeData(snap.data);
     state.fileSha = snap.sha || null;
@@ -3004,10 +3042,11 @@
   async function bootstrap() {
     // Read again now and take data, sha, base and unsaved flag from that one snapshot; listen for
     // other tabs in the same step so no write can slip in between.
-    const snap = readLocalSnapshot();
+    const snap = readLocalSnapshot(state.settings);
     state.fileSha = snap.sha;
     state.baseData = snap.base;
-    dirty = snap.dirty;
+    // Data cached for another repo is not saved in this one yet (as after a repo change in Settings).
+    dirty = snap.dirty || (snap.foreign && !!snap.data && roleCanEdit());
     lastSnapId = snap.id;
     legacyKeysPending = snap.pending;
     window.addEventListener("storage", onOtherTabWrite);

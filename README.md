@@ -114,7 +114,9 @@ UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCL / Summ
 
 ### Several tabs in one browser
 
-- Each tab keeps its local copy in one localStorage key, `lumax-eng-mgmt-sync` = `{v, sha, dirty, data, tab, at, id, parent}`, written in a single step. Data, GitHub SHA and the unsaved flag therefore always come from the same tab and moment. The merge base sits in `lumax-eng-mgmt-base` as `{sha, data}` and is used after a reload only if its `sha` matches the snapshot's. Otherwise there is no base, and a Save conflict asks before merging.
+- Each tab keeps its local copy in one localStorage key, `lumax-eng-mgmt-sync` = `{v, sha, dirty, data, owner, repo, tab, at, id, parent}`, written in a single step. Data, GitHub SHA and the unsaved flag therefore always come from the same tab and moment. The merge base sits in `lumax-eng-mgmt-base` as `{sha, data}` and is used after a reload only if its `sha` matches the snapshot's. Otherwise there is no base, and a Save conflict asks before merging.
+- `owner`/`repo` name the repo the SHA belongs to. A snapshot for another repo than the settings name now (a tab still on old settings saved after an Engineer ID change) keeps its data, but not its SHA or base, and counts as unsaved; Save then checks GitHub first. Other tabs never take such a copy over.
+- If the browser storage is full, a tab keeps working from memory. Another tab's later write is then never taken over a tab with unsaved changes: that tab shows the banner instead.
 - The old keys (`lumax-eng-mgmt-data`, `-sha`, `-dirty`) are moved into the snapshot once at start-up and then removed. The unsaved flag is kept; the old base is dropped.
 - When another tab saves or edits:
   - A tab with no unsaved changes takes over that copy ("Updated from another tab").
@@ -128,6 +130,7 @@ UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCL / Summ
 - [ ] **(a′)** Open tabs A and B. In B, open a project's edit form and leave it open. In A, edit a task. B shows the banner. Close B's form: edit buttons are hidden, the *Read-only* badge explains why, and **Save** is still visible. Save in B (the banner clears), then Save in A: A's edit ends up on GitHub.
 - [ ] **(b)** Import a JSON file, reload, then Save. The *Remote data differs from this browser…* confirm must appear.
 - [ ] **(c)** Change the Engineer ID (new repo), reload, then Save to the new repo. There must be no stale-SHA error (422 / *Merge & retry*).
+- [ ] **(c′)** Open tabs A and B. In A, change the Engineer ID (B shows the banner). Click **Save** in B, then reload A and Save. A must save to the new repo without a stale-SHA error.
 - [ ] **(d)** With unsaved changes in a tab that shows the banner, click **Reload**. It asks first; Cancel keeps everything as it was.
 
 ## Sample data
