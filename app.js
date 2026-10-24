@@ -32,73 +32,96 @@
     { id: "phase-done", name: "Done" },
   ];
 
-  /** Extensible dashboard / projects filter chips. Add entries here for new views. */
+  /**
+   * Dashboard / Projects view chips. Each entry is one of:
+   *  - kind "browse": a list panel on the dashboard; `browse` says which list
+   *    ("clients" | "assignees" | "structure-types").
+   *  - kind "filter": narrows the project list; `match(p)` is the single source of
+   *    truth for both the list and every count shown for that view.
+   * `note` (plain text) is shown under the view title on the dashboard.
+   * The dynamic id "type:<structure type>" is resolved by viewMatcher().
+   */
   const DASHBOARD_VIEWS = [
     {
       id: "clients",
       label: "Clients",
-      kind: "browse-clients",
+      kind: "browse",
+      browse: "clients",
       hint: "Unique clients from projects",
     },
     {
       id: "assignees",
       label: "Engineer",
-      kind: "browse-assignees",
+      kind: "browse",
+      browse: "assignees",
       hint: "Unique assignees from all tasks",
     },
     {
       id: "project-types",
       label: "Structure type",
-      kind: "browse-structure-types",
+      kind: "browse",
+      browse: "structure-types",
       hint: "Browse projects by structure type",
     },
     {
       id: "open-projects",
       label: "Open projects",
-      kind: "filter-projects",
+      kind: "filter",
       hint: "Active (non-archived) projects",
+      match: (p) => !p.archived,
     },
     {
       id: "overdue-work",
       label: "Overdue work",
-      kind: "filter-projects",
+      kind: "filter",
       hint: "Projects with at least one overdue open task",
+      match: (p) => overdueCount(p) > 0,
     },
     {
       id: "muni-pending",
       label: "Municipal sign-off pending",
-      kind: "filter-projects",
+      kind: "filter",
       hint: "Municipal sign-off = pending",
+      match: (p) => normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "pending",
     },
     {
       id: "conformance",
       label: "Structural Conformance Letter",
-      kind: "filter-projects",
+      kind: "filter",
       hint: "Pending or approved Structural Conformance Letter (not none)",
+      note: "Conformance letter means status is pending or approved (not none).",
+      match: (p) => hasConformance(p),
     },
     {
       id: "scf-ready",
       label: "Ready for SC letter",
-      kind: "filter-projects",
+      kind: "filter",
       hint: "INV + contact + address + Done phase — ready to create SC Letter",
+      note: "Requires invoice, contact, address, and current phase Done.",
+      match: (p) => isScfReady(p),
     },
     {
       id: "scf-issued",
       label: "SC letters issued",
-      kind: "filter-projects",
+      kind: "filter",
       hint: "Approved with LMX-SCL / LMX-SCF ref",
+      note: "Approved with an LMX-SCL-YYYY-NNN reference (legacy LMX-SCF-* still shown).",
+      match: (p) => isScfIssued(p),
     },
     {
       id: "commercial-gaps",
       label: "Commercial gaps",
-      kind: "filter-projects",
+      kind: "filter",
       hint: "Missing invoice, address, or contact person",
+      match: (p) => missingCommercialFields(p).length > 0,
     },
     {
       id: "site-investigation",
       label: "Site investigation",
-      kind: "filter-projects",
+      kind: "filter",
       hint: "Active / current phase is Site investigation",
+      note: "Current phase = first phase with open tasks; if all tasks done, terminal phase.",
+      match: (p) => projectInSiteInvestigation(p),
     },
   ];
 
@@ -189,8 +212,8 @@
     showArchived: false,
     search: "",
     taskFilters: { type: "", statusId: "", assignee: "", overdueOnly: false, projectId: "", client: "", structureType: "", hideCompleted: loadUiPrefs().hideCompleted },
-    projectFilters: { client: "", dashboardView: null },
-    dashboardView: null, // id from DASHBOARD_VIEWS, or null
+    projectFilters: { client: "" },
+    dashboardView: null, // id from DASHBOARD_VIEWS, "type:<structure type>", or null
     tasksMode: "list", // list | board
     settings: loadBrowserSettings(),
     githubUser: null,
@@ -1186,21 +1209,16 @@
     return { light: "amber", note: "" };
   }
   function execDashboardKpis() {
-    const projects = (state.data.projects || []).filter((p) => inScope(p) && !p.archived);
-    const tasks = state.data.tasks || [];
-    const openProjects = projects.length;
-    const overdueTasks = tasks.filter((t) => isLiveTask(t) && isOverdue(t)).length;
-    const ready = projects.filter((p) => isScfReady(p)).length;
-    const issued = projects.filter((p) => isScfIssued(p)).length;
-    const gaps = projects.filter((p) => missingCommercialFields(p).length > 0).length;
-    const muniPending = projects.filter((p) => normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "pending").length;
+    const projects = scopedProjects();
+    const count = (viewId) => projects.filter(viewMatcher(viewId)).length;
+    const overdueTasks = scopedTasks().filter((t) => isOverdue(t)).length;
     const rows = [
-      { id: "open-projects", label: "Open projects", value: openProjects, view: "open-projects" },
+      { id: "open-projects", label: "Open projects", value: count("open-projects"), view: "open-projects" },
       { id: "overdue-work", label: "Overdue work", value: overdueTasks, view: "overdue-work", tasksOverdue: true },
-      { id: "scf-ready", label: "Ready for SC letter", value: ready, view: "scf-ready" },
-      { id: "scf-issued", label: "SC letters issued", value: issued, view: "scf-issued" },
-      { id: "commercial-gaps", label: "Commercial gaps", value: gaps, view: "commercial-gaps" },
-      { id: "muni-pending", label: "Municipal sign-off pending", value: muniPending, view: "muni-pending" },
+      { id: "scf-ready", label: "Ready for SC letter", value: count("scf-ready"), view: "scf-ready" },
+      { id: "scf-issued", label: "SC letters issued", value: count("scf-issued"), view: "scf-issued" },
+      { id: "commercial-gaps", label: "Commercial gaps", value: count("commercial-gaps"), view: "commercial-gaps" },
+      { id: "muni-pending", label: "Municipal sign-off pending", value: count("muni-pending"), view: "muni-pending" },
     ];
     return rows.map((r) => {
       const tl = kpiTrafficLight(r.id, r.value);
@@ -1213,14 +1231,6 @@
     if (!(project.invoiceNumber || "").trim()) missing.push("Invoice number");
     if (!(project.contactPerson || "").trim()) missing.push("Contact person");
     if (!(project.address || "").trim()) missing.push("Address");
-    return missing;
-  }
-  function missingPoPopInv(project) {
-    const missing = [];
-    if (!project) return ["project"];
-    if (!(project.poNumber || "").trim()) missing.push("PO number");
-    if (!(project.popReference || "").trim()) missing.push("POP reference");
-    if (!(project.invoiceNumber || "").trim()) missing.push("Invoice number");
     return missing;
   }
   function scfIssueBlockers(project) {
@@ -1379,20 +1389,10 @@
     });
     return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
   }
-  function uniqueProjectTypes() {
-    const set = new Set(getProjectTypes());
-    (state.data.projects || []).forEach((p) => {
-      const t = (p.projectType || "").trim();
-      if (t) set.add(t);
-      (p.structureTypes || []).forEach((s) => {
-        if ((s || "").trim()) set.add(s.trim());
-      });
-    });
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }
+  // Leader view scope: clients/assignees listed are those of the engineer on screen.
   function uniqueClients() {
     const set = new Set();
-    (state.data.projects || []).forEach((p) => {
+    scopedProjects({ includeArchived: true }).forEach((p) => {
       const c = (p.clientName || "").trim();
       if (c) set.add(c);
     });
@@ -1400,7 +1400,7 @@
   }
   function uniqueAssignees() {
     const set = new Set();
-    (state.data.tasks || []).forEach((t) => {
+    scopedTasks({ includeArchived: true }).forEach((t) => {
       const a = (t.assignee || "").trim();
       if (a) set.add(a);
     });
@@ -1409,40 +1409,29 @@
   function getDashboardView(id) {
     return DASHBOARD_VIEWS.find((v) => v.id === id) || null;
   }
+  function clientMatches(p, client) {
+    return (p.clientName || "").trim().toLowerCase() === String(client || "").trim().toLowerCase();
+  }
+  /** Project predicate for a view id (registry "filter" entry or "type:<name>"); null = no filter. */
+  function viewMatcher(id) {
+    if (!id) return null;
+    if (String(id).startsWith("type:")) {
+      const want = String(id).slice(5).trim().toLowerCase();
+      return (p) => (p.structureTypes || []).some((s) => String(s || "").trim().toLowerCase() === want);
+    }
+    const def = getDashboardView(id);
+    return def && def.kind === "filter" && typeof def.match === "function" ? def.match : null;
+  }
   function projectsMatchingFilters(extra) {
     const q = (state.search || "").trim().toLowerCase();
     const clientFilter = (extra && extra.client !== undefined ? extra.client : state.projectFilters.client) || "";
     const viewId = extra && extra.dashboardView !== undefined ? extra.dashboardView : state.dashboardView;
-    let projects = (state.data.projects || []).filter((p) => inScope(p) && (state.showArchived || !p.archived));
+    let projects = scopedProjects({ includeArchived: state.showArchived });
     if (clientFilter) {
-      projects = projects.filter((p) => (p.clientName || "").toLowerCase() === clientFilter.toLowerCase());
+      projects = projects.filter((p) => clientMatches(p, clientFilter));
     }
-    if (viewId === "open-projects") {
-      projects = projects.filter((p) => !p.archived);
-    } else if (viewId === "overdue-work") {
-      projects = projects.filter((p) => overdueCount(p) > 0);
-    } else if (viewId === "eng-signoff" || viewId === "muni-approved") {
-      projects = projects.filter((p) => normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "approved");
-    } else if (viewId === "muni-pending") {
-      projects = projects.filter((p) => normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "pending");
-    } else if (viewId === "conformance") {
-      projects = projects.filter((p) => hasConformance(p));
-    } else if (viewId === "scf-ready") {
-      projects = projects.filter((p) => isScfReady(p));
-    } else if (viewId === "scf-issued") {
-      projects = projects.filter((p) => isScfIssued(p));
-    } else if (viewId === "commercial-gaps") {
-      projects = projects.filter((p) => missingCommercialFields(p).length > 0);
-    } else if (viewId === "missing-po-pop-inv") {
-      projects = projects.filter((p) => missingPoPopInv(p).length > 0);
-    } else if (viewId === "site-investigation") {
-      projects = projects.filter((p) => projectInSiteInvestigation(p));
-    } else if (viewId && String(viewId).startsWith("type:")) {
-      const want = String(viewId).slice(5).toLowerCase();
-      projects = projects.filter((p) =>
-        (p.structureTypes || []).some((s) => String(s).toLowerCase() === want)
-      );
-    }
+    const m = viewMatcher(viewId);
+    if (m) projects = projects.filter(m);
     if (q) {
       projects = projects.filter((p) => {
         const hay = [
@@ -2083,6 +2072,16 @@
   function inScope(r) {
     if (!isLeader() || !state.engFilter || state.engFilter === "all") return true;
     return (r._eng || myEngineerId()) === state.engFilter;
+  }
+  // Every on-screen count goes through these so the leader's engineer filter applies everywhere.
+  function scopedProjects(opts) {
+    const includeArchived = !!(opts && opts.includeArchived);
+    return (state.data.projects || []).filter((p) => inScope(p) && (includeArchived || !p.archived));
+  }
+  // Live tasks (not on archived projects) unless includeArchived.
+  function scopedTasks(opts) {
+    const includeArchived = !!(opts && opts.includeArchived);
+    return (state.data.tasks || []).filter((t) => (includeArchived ? inScope(t) : isLiveTask(t)));
   }
   function newRecordTag(projectId) {
     if (!isLeader()) return {};
@@ -3329,260 +3328,226 @@
     if (!id) {
       state.dashboardView = null;
       state.projectFilters.client = "";
-      state.projectFilters.dashboardView = null;
       render();
       return;
     }
     if (String(id).startsWith("type:")) {
       state.dashboardView = id;
-      state.projectFilters.dashboardView = id;
       if (state.view === "dashboard" || state.view === "projects") render();
       else setView("projects");
       return;
     }
     const def = getDashboardView(id);
     if (!def) return;
-
-    if (def.kind === "browse-clients" || def.kind === "browse-assignees" || def.kind === "browse-project-types") {
+    if (def.kind === "browse") {
       state.dashboardView = id;
-      state.projectFilters.dashboardView = null;
       // Browse lists live on the dashboard
       if (state.view !== "dashboard") setView("dashboard");
       else render();
       return;
     }
-
-    if (def.kind === "filter-projects") {
+    if (def.kind === "filter") {
       // Toggle same chip off
-      if (state.dashboardView === id) {
-        state.dashboardView = null;
-        state.projectFilters.dashboardView = null;
-      } else {
-        state.dashboardView = id;
-        state.projectFilters.dashboardView = id;
-      }
+      state.dashboardView = state.dashboardView === id ? null : id;
       if (state.view === "dashboard" || state.view === "projects") render();
       else setView("projects");
-      return;
     }
+  }
+
+  // ---------- Project cards (dashboard view panels + Projects grid) ----------
+  function projectCardHtml(p, opts) {
+    const compact = !!(opts && opts.compact);
+    const cur = projectCurrentPhase(p);
+    const muni = normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff);
+    const tags = [];
+    if (isSample(p)) tags.push('<span class="sample-tag">SAMPLE</span>');
+    if (p.archived) tags.push('<span class="sample-tag" style="background:#eee;color:#555">ARCHIVED</span>');
+    // Team view: always say whose project this is.
+    if (isLeader()) tags.push(`<span class="pill eng" title="Engineer">${escapeHtml(p._eng || myEngineerId() || "")}</span>`);
+    if (muni === "approved") tags.push('<span class="pill signoff">Municipal approved</span>');
+    else if (muni === "pending") tags.push('<span class="pill muni-pending">Municipal pending</span>');
+    if (isScfIssued(p)) tags.push(`<span class="pill conformance issued">${escapeHtml(displayConformanceRef(p.conformanceRef) || "SCL issued")}</span>`);
+    else if (hasConformance(p)) tags.push(`<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span>`);
+    if (!compact) {
+      if (isScfReady(p)) tags.push('<span class="pill scf-ready">SCL ready</span>');
+      if (!(p.invoiceNumber || "").trim()) tags.push('<span class="pill gap">No INV</span>');
+      if (!(p.address || "").trim()) tags.push('<span class="pill gap">No address</span>');
+    }
+    let phaseLine = "";
+    if (cur && compact) phaseLine = `<div class="stat-sub">Current: ${escapeHtml(cur.name)}</div>`;
+    else if (cur) {
+      phaseLine =
+        `<div class="stat-sub">Phase: ${escapeHtml(cur.name)}` +
+        (p.poNumber || p.popReference || p.invoiceNumber
+          ? ` · PO ${escapeHtml(p.poNumber || "—")} · INV ${escapeHtml(p.invoiceNumber || "—")}`
+          : "") +
+        `</div>`;
+    }
+    let summary = "";
+    if (!compact) {
+      const blocked = blockedCount(p);
+      const overdue = overdueCount(p);
+      summary =
+        `<div class="task-summary">` +
+        `<span class="pill open">${openTaskCount(p)} open</span>` +
+        (blocked ? `<span class="pill blocked">${blocked} blocked</span>` : "") +
+        (overdue ? `<span class="pill overdue">${overdue} overdue</span>` : "") +
+        `</div>`;
+    }
+    return (
+      `<article class="project-card${p.archived ? " archived" : ""}${projectAtRisk(p) ? " at-risk" : ""}" data-id="${escapeHtml(p.id)}" tabindex="0" role="button">` +
+      `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
+      `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
+      `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}` +
+      (p.projectType ? ` · ${escapeHtml(p.projectType)}` : "") +
+      `</div>` +
+      tags.join(" ") +
+      phaseLine +
+      summary +
+      `</article>`
+    );
+  }
+  function bindProjectCards(grid) {
+    grid.querySelectorAll(".project-card").forEach((card) => {
+      card.addEventListener("click", () => openProject(card.dataset.id));
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openProject(card.dataset.id);
+        }
+      });
+    });
+  }
+
+  // Dashboard list of browse cards (clients / assignees / structure types); attr names the data-* key.
+  function renderBrowsePanel(root, o) {
+    root.innerHTML =
+      renderViewChips(state.dashboardView) +
+      `<div class="dash-view-panel">` +
+      `<h2>${escapeHtml(o.title)} <span class="stat-sub">(${o.cards.length})</span></h2>` +
+      `<p class="hint">${escapeHtml(o.hint)}</p>` +
+      `<div class="browse-chip-grid">` +
+      (o.cards.length
+        ? o.cards
+            .map(
+              (c) =>
+                `<button type="button" class="browse-card" data-${o.attr}="${escapeHtml(c.value)}">` +
+                `<div class="browse-card-title">${escapeHtml(c.value)}</div>` +
+                `<div class="stat-sub">${escapeHtml(c.sub)}</div>` +
+                `</button>`
+            )
+            .join("")
+        : `<div class="empty-state">${escapeHtml(o.empty)}</div>`) +
+      `</div></div>`;
+    bindViewChips(root);
+    root.querySelectorAll(`[data-${o.attr}]`).forEach((btn) => {
+      btn.onclick = () => o.pick(btn.getAttribute(`data-${o.attr}`));
+    });
+  }
+  // Dashboard list of project cards for the active filter view or "type:<name>".
+  function renderProjectsPanel(root, o) {
+    const projects = projectsMatchingFilters();
+    root.innerHTML =
+      renderViewChips(o.chip) +
+      `<div class="dash-view-panel">` +
+      `<h2>${escapeHtml(o.title)} <span class="stat-sub">(${projects.length})</span></h2>` +
+      `<p class="hint">${escapeHtml(o.hint || "")}${o.note ? " — " + escapeHtml(o.note) : ""}</p>` +
+      `<div class="project-grid" id="dash-filtered-projects"></div>` +
+      `<div class="dash-view-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-open-filtered-projects">Open in Projects</button></div>` +
+      `</div>`;
+    const grid = root.querySelector("#dash-filtered-projects");
+    if (!projects.length) {
+      grid.innerHTML = `<div class="empty-state">${escapeHtml(o.empty)}</div>`;
+    } else {
+      grid.innerHTML = projects.map((p) => projectCardHtml(p, { compact: true })).join("");
+      bindProjectCards(grid);
+    }
+    bindViewChips(root);
+    const openBtn = root.querySelector("#btn-open-filtered-projects");
+    if (openBtn) openBtn.onclick = () => setView("projects");
   }
 
   function renderDashboard() {
     const root = document.getElementById("view-dashboard");
     const viewDef = state.dashboardView ? getDashboardView(state.dashboardView) : null;
 
-    // Browse / filtered view panels take over when a chip is active
-    if (viewDef && viewDef.kind === "browse-clients") {
-      const clients = uniqueClients();
-      root.innerHTML =
-        renderViewChips(state.dashboardView) +
-        `<div class="dash-view-panel">` +
-        `<h2>Clients <span class="stat-sub">(${clients.length})</span></h2>` +
-        `<p class="hint">Click a client to open Projects filtered by that client.</p>` +
-        `<div class="browse-chip-grid">` +
-        (clients.length
-          ? clients
-              .map(
-                (c) =>
-                  `<button type="button" class="browse-card" data-client="${escapeHtml(c)}">` +
-                  `<div class="browse-card-title">${escapeHtml(c)}</div>` +
-                  `<div class="stat-sub">${(state.data.projects || []).filter((p) => (p.clientName || "") === c && !p.archived).length} active project(s)</div>` +
-                  `</button>`
-              )
-              .join("")
-          : `<div class="empty-state">No clients yet</div>`) +
-        `</div></div>`;
-      bindViewChips(root);
-      root.querySelectorAll("[data-client]").forEach((btn) => {
-        btn.onclick = () => {
-          state.projectFilters.client = btn.dataset.client;
+    // Browse / filtered view panels take over when a chip is active. Their counts use the
+    // same scoped lists and matchers as the Projects / Tasks views they open.
+    if (viewDef && viewDef.browse === "clients") {
+      const active = scopedProjects();
+      renderBrowsePanel(root, {
+        title: "Clients",
+        hint: "Click a client to open Projects filtered by that client.",
+        attr: "client",
+        empty: "No clients yet",
+        cards: uniqueClients().map((c) => ({ value: c, sub: active.filter((p) => clientMatches(p, c)).length + " active project(s)" })),
+        pick: (c) => {
+          state.projectFilters.client = c;
           state.dashboardView = null;
-          state.projectFilters.dashboardView = null;
-          state.taskFilters.client = btn.dataset.client;
+          state.taskFilters.client = c;
           setView("projects");
-        };
+        },
       });
       return;
     }
 
-    if (viewDef && viewDef.kind === "browse-assignees") {
-      const assignees = uniqueAssignees();
-      root.innerHTML =
-        renderViewChips(state.dashboardView) +
-        `<div class="dash-view-panel">` +
-        `<h2>Engineer <span class="stat-sub">(${assignees.length})</span></h2>` +
-        `<p class="hint">Click an assignee to open Tasks filtered by that person.</p>` +
-        `<div class="browse-chip-grid">` +
-        (assignees.length
-          ? assignees
-              .map((a) => {
-                const openN = (state.data.tasks || []).filter(
-                  (t) => (t.assignee || "") === a && statusIsOpen(t.statusId)
-                ).length;
-                return (
-                  `<button type="button" class="browse-card" data-assignee="${escapeHtml(a)}">` +
-                  `<div class="browse-card-title">${escapeHtml(a)}</div>` +
-                  `<div class="stat-sub">${openN} open task(s)</div>` +
-                  `</button>`
-                );
-              })
-              .join("")
-          : `<div class="empty-state">No assignees yet</div>`) +
-        `</div></div>`;
-      bindViewChips(root);
-      root.querySelectorAll("[data-assignee]").forEach((btn) => {
-        btn.onclick = () => {
-          state.taskFilters = blankTaskFilters({
-            assignee: btn.dataset.assignee,
-          });
+    if (viewDef && viewDef.browse === "assignees") {
+      const open = scopedTasks().filter((t) => statusIsOpen(t.statusId));
+      renderBrowsePanel(root, {
+        title: "Engineer",
+        hint: "Click an assignee to open Tasks filtered by that person.",
+        attr: "assignee",
+        empty: "No assignees yet",
+        // Same comparison as the Tasks assignee filter this card opens
+        cards: uniqueAssignees().map((a) => ({ value: a, sub: open.filter((t) => (t.assignee || "").toLowerCase() === a.toLowerCase()).length + " open task(s)" })),
+        pick: (a) => {
+          state.taskFilters = blankTaskFilters({ assignee: a });
           state.dashboardView = null;
           setView("tasks");
-        };
+        },
       });
       return;
     }
 
-    if (viewDef && (viewDef.kind === "browse-structure-types" || viewDef.kind === "browse-project-types")) {
-      const types = uniqueStructureTypes();
-      root.innerHTML =
-        renderViewChips(state.dashboardView) +
-        `<div class="dash-view-panel">` +
-        `<h2>Structure type <span class="stat-sub">(${types.length})</span></h2>` +
-        `<p class="hint">Click a structure type to list matching projects (filtered by structureTypes).</p>` +
-        `<div class="browse-chip-grid">` +
-        (types.length
-          ? types
-              .map((t) => {
-                const n = (state.data.projects || []).filter((p) => {
-                  if (p.archived) return false;
-                  return (p.structureTypes || []).includes(t);
-                }).length;
-                return (
-                  `<button type="button" class="browse-card" data-ptype="${escapeHtml(t)}">` +
-                  `<div class="browse-card-title">${escapeHtml(t)}</div>` +
-                  `<div class="stat-sub">${n} active project(s)</div>` +
-                  `</button>`
-                );
-              })
-              .join("")
-          : `<div class="empty-state">No structure types yet — add some in Settings</div>`) +
-        `</div></div>`;
-      bindViewChips(root);
-      root.querySelectorAll("[data-ptype]").forEach((btn) => {
-        btn.onclick = () => {
-          state.dashboardView = "type:" + btn.dataset.ptype;
-          state.projectFilters.dashboardView = state.dashboardView;
+    if (viewDef && viewDef.browse === "structure-types") {
+      const active = scopedProjects();
+      renderBrowsePanel(root, {
+        title: "Structure type",
+        hint: "Click a structure type to list matching projects.",
+        attr: "ptype",
+        empty: "No structure types yet — add some in Settings",
+        cards: uniqueStructureTypes().map((t) => ({ value: t, sub: active.filter(viewMatcher("type:" + t)).length + " active project(s)" })),
+        pick: (t) => {
+          state.dashboardView = "type:" + t;
           setView("projects");
-        };
+        },
       });
       return;
     }
 
     if (String(state.dashboardView || "").startsWith("type:")) {
-      const want = String(state.dashboardView).slice(5);
-      const projects = projectsMatchingFilters();
-      root.innerHTML =
-        renderViewChips("project-types") +
-        `<div class="dash-view-panel">` +
-        `<h2>Type: ${escapeHtml(want)} <span class="stat-sub">(${projects.length})</span></h2>` +
-        `<p class="hint">Projects with this projectType or structure type. Open in Projects to continue.</p>` +
-        `<div class="project-grid" id="dash-filtered-projects"></div>` +
-        `<div class="dash-view-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-open-filtered-projects">Open in Projects</button></div>` +
-        `</div>`;
-      const grid = root.querySelector("#dash-filtered-projects");
-      if (!projects.length) {
-        grid.innerHTML = '<div class="empty-state">No projects match this type.</div>';
-      } else {
-        grid.innerHTML = projects
-          .map((p) => {
-            const cur = projectCurrentPhase(p);
-            return (
-              `<article class="project-card${p.archived ? " archived" : ""}${projectAtRisk(p) ? " at-risk" : ""}" data-id="${escapeHtml(p.id)}" tabindex="0" role="button">` +
-              `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
-              `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
-              `<div class="meta">${escapeHtml(p.clientName || "No client")} · ${escapeHtml(p.projectType || "—")}</div>` +
-              (isScfIssued(p) ? `<span class="pill conformance">${escapeHtml(p.conformanceRef)}</span> ` : "") +
-              (cur ? `<div class="stat-sub">Current: ${escapeHtml(cur.name)}</div>` : "") +
-              `</article>`
-            );
-          })
-          .join("");
-        grid.querySelectorAll(".project-card").forEach((card) => {
-          card.addEventListener("click", () => openProject(card.dataset.id));
-          card.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              openProject(card.dataset.id);
-            }
-          });
-        });
-      }
-      bindViewChips(root);
-      const openBtn = root.querySelector("#btn-open-filtered-projects");
-      if (openBtn) openBtn.onclick = () => setView("projects");
+      renderProjectsPanel(root, {
+        chip: "project-types",
+        title: "Structure type: " + String(state.dashboardView).slice(5),
+        hint: "Projects with this structure type. Open in Projects to continue.",
+        empty: "No projects match this structure type.",
+      });
       return;
     }
 
-    if (viewDef && viewDef.kind === "filter-projects") {
-      const projects = projectsMatchingFilters();
-      root.innerHTML =
-        renderViewChips(state.dashboardView) +
-        `<div class="dash-view-panel">` +
-        `<h2>${escapeHtml(viewDef.label)} <span class="stat-sub">(${projects.length})</span></h2>` +
-        `<p class="hint">${escapeHtml(viewDef.hint || "")}` +
-        (viewDef.id === "conformance"
-          ? ' — <em>Conformance letter</em> means status is <strong>pending</strong> or <strong>approved</strong> (not none).'
-          : "") +
-        (viewDef.id === "scf-ready"
-          ? " — Requires invoice, contact, address, and current phase <strong>Done</strong>."
-          : "") +
-        (viewDef.id === "scf-issued"
-          ? " — Approved with an <strong>LMX-SCL-YYYY-NNN</strong> reference (legacy LMX-SCF-* still shown)."
-          : "") +
-        (viewDef.id === "site-investigation"
-          ? " — Current phase = first phase with open tasks; if all tasks done, terminal phase."
-          : "") +
-        `</p>` +
-        `<div class="project-grid" id="dash-filtered-projects"></div>` +
-        `<div class="dash-view-actions"><button type="button" class="btn btn-secondary btn-sm" id="btn-open-filtered-projects">Open in Projects</button></div>` +
-        `</div>`;
-      const grid = root.querySelector("#dash-filtered-projects");
-      if (!projects.length) {
-        grid.innerHTML = '<div class="empty-state">No projects match this view.</div>';
-      } else {
-        grid.innerHTML = projects
-          .map((p) => {
-            const cur = projectCurrentPhase(p);
-            return (
-              `<article class="project-card${p.archived ? " archived" : ""}${projectAtRisk(p) ? " at-risk" : ""}" data-id="${escapeHtml(p.id)}" tabindex="0" role="button">` +
-              `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
-              `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
-              `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}</div>` +
-              (normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "approved" ? '<span class="pill signoff">Municipal approved</span> ' : normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "pending" ? '<span class="pill muni-pending">Municipal pending</span> ' : "") +
-              (isLeader() && p._eng ? `<span class="pill">${escapeHtml(p._eng)}</span> ` : "") +
-              (hasConformance(p) ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span> ` : "") +
-              (cur ? `<div class="stat-sub">Current: ${escapeHtml(cur.name)}</div>` : "") +
-              `</article>`
-            );
-          })
-          .join("");
-        grid.querySelectorAll(".project-card").forEach((card) => {
-          card.addEventListener("click", () => openProject(card.dataset.id));
-          card.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              openProject(card.dataset.id);
-            }
-          });
-        });
-      }
-      bindViewChips(root);
-      const openBtn = root.querySelector("#btn-open-filtered-projects");
-      if (openBtn) openBtn.onclick = () => setView("projects");
+    if (viewDef && viewDef.kind === "filter") {
+      renderProjectsPanel(root, {
+        chip: state.dashboardView,
+        title: viewDef.label,
+        hint: viewDef.hint,
+        note: viewDef.note,
+        empty: "No projects match this view.",
+      });
       return;
     }
 
-    const tasks = (state.data.tasks || []).filter(isLiveTask);
+    const tasks = scopedTasks();
+    const activeProjects = scopedProjects();
     const open = tasks.filter((t) => statusIsOpen(t.statusId));
     const statuses = statusesInUse(open);
     const overdue = tasks.filter((t) => isOverdue(t));
@@ -3619,7 +3584,7 @@
     }));
 
     // Projects at risk
-    const risk = (state.data.projects || []).filter((p) => !p.archived && projectAtRisk(p));
+    const risk = activeProjects.filter(projectAtRisk);
 
     // My work
     const myWork = myName
@@ -3632,9 +3597,9 @@
       .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
       .slice(0, 8);
 
-    const signOffN = (state.data.projects || []).filter((p) => !p.archived && normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "approved").length;
-    const confN = (state.data.projects || []).filter((p) => inScope(p) && !p.archived && hasConformance(p)).length;
-    const siteN = (state.data.projects || []).filter((p) => !p.archived && projectInSiteInvestigation(p)).length;
+    const signOffN = activeProjects.filter((p) => normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "approved").length;
+    const confN = activeProjects.filter(viewMatcher("conformance")).length;
+    const siteN = activeProjects.filter(viewMatcher("site-investigation")).length;
     const execKpis = execDashboardKpis();
 
     root.innerHTML =
@@ -3657,7 +3622,7 @@
       `<div class="dash-grid">` +
       `<div class="dash-card span-4"><h3>Open tasks</h3><div class="stat-big">${open.length}</div><div class="stat-sub">${overdue.length} overdue · ${due7.length} due in 7d</div></div>` +
       `<div class="dash-card span-4"><h3>Standalone</h3><div class="stat-big">${tasks.filter((t) => !t.projectId && statusIsOpen(t.statusId)).length}</div><div class="stat-sub">open without project</div></div>` +
-      `<div class="dash-card span-4"><h3>Active projects</h3><div class="stat-big">${(state.data.projects || []).filter((p) => inScope(p) && !p.archived).length}</div><div class="stat-sub">${risk.length} at risk · ${signOffN} municipal approved · ${siteN} site inv. · ${confN} SC letter</div></div>` +
+      `<div class="dash-card span-4"><h3>Active projects</h3><div class="stat-big">${activeProjects.length}</div><div class="stat-sub">${risk.length} at risk · ${signOffN} municipal approved · ${siteN} site inv. · ${confN} SC letter</div></div>` +
       `<div class="dash-card span-6"><h3>Open by status</h3><div class="status-bars">` +
       byStatus
         .map((x) => {
@@ -3758,16 +3723,8 @@
           setView("tasks");
           return;
         }
-        const view = btn.dataset.view || "";
-        if (view) {
-          state.dashboardView = view;
-          state.projectFilters.dashboardView = view;
-          setView("projects");
-          return;
-        }
-        // Open projects → projects list
-        state.dashboardView = null;
-        state.projectFilters.dashboardView = null;
+        // KPI → Projects list filtered by the same view the KPI counted
+        state.dashboardView = btn.dataset.view || null;
         setView("projects");
       };
     });
@@ -3784,16 +3741,20 @@
       chipsHost.id = "projects-view-chips";
       root.insertBefore(chipsHost, toolbar ? toolbar.nextSibling : root.firstChild);
     }
-    // Keep filter-project chips in sync with dashboardViews (browse chips still useful)
+    // Filter chips plus the browse chips that lead to a project list (Clients, Structure type)
     const filterViews = DASHBOARD_VIEWS.filter(
-      (v) => v.kind === "filter-projects" || v.kind === "browse-clients" || v.kind === "browse-project-types"
+      (v) => v.kind === "filter" || v.browse === "clients" || v.browse === "structure-types"
     );
     const activeId = state.dashboardView;
+    const typeView = !!activeId && String(activeId).startsWith("type:");
     chipsHost.innerHTML =
       `<div class="view-chips" role="toolbar" aria-label="Project views">` +
       filterViews
         .map((v) => {
-          const active = activeId === v.id || (v.id === "clients" && !!state.projectFilters.client);
+          const active =
+            activeId === v.id ||
+            (v.browse === "clients" && !!state.projectFilters.client) ||
+            (v.browse === "structure-types" && typeView);
           return `<button type="button" class="view-chip${active ? " active" : ""}" data-proj-view="${escapeHtml(v.id)}" title="${escapeHtml(v.hint || "")}">${escapeHtml(v.label)}</button>`;
         })
         .join("") +
@@ -3806,8 +3767,8 @@
       (activeId === "conformance"
         ? `<span class="view-chip-meta hint-inline">Structural Conformance Letter = pending | approved · Municipal = pending | approved | n/a</span>`
         : "") +
-      (activeId && String(activeId).startsWith("type:")
-        ? `<span class="view-chip-meta">Type: <strong>${escapeHtml(String(activeId).slice(5))}</strong></span>`
+      (typeView
+        ? `<span class="view-chip-meta">Structure type: <strong>${escapeHtml(String(activeId).slice(5))}</strong></span>`
         : "") +
       `</div>`;
 
@@ -3817,30 +3778,26 @@
         if (!id) {
           state.dashboardView = null;
           state.projectFilters.client = "";
-          state.projectFilters.dashboardView = null;
           state.taskFilters.client = "";
           renderProjects();
           return;
         }
         const def = getDashboardView(id);
         if (!def) return;
-        if (def.kind === "browse-clients" || def.kind === "browse-project-types") {
+        if (def.kind === "browse") {
+          // Pick a client / structure type on the dashboard, which comes back here filtered
           state.dashboardView = def.id;
           setView("dashboard");
           return;
         }
-        if (state.dashboardView === id) {
-          state.dashboardView = null;
-          state.projectFilters.dashboardView = null;
-        } else {
-          state.dashboardView = id;
-          state.projectFilters.dashboardView = id;
+        if (def.kind === "filter") {
+          state.dashboardView = state.dashboardView === id ? null : id;
+          renderProjects();
         }
-        renderProjects();
       };
     });
 
-    let projects = projectsMatchingFilters();
+    const projects = projectsMatchingFilters();
 
     const grid = document.getElementById("project-grid");
     if (!projects.length) {
@@ -3849,7 +3806,7 @@
         '<div class="empty-state">' +
         (state.search
           ? 'No projects match the search <strong>“' + escapeHtml(state.search) + '”</strong>. <button type="button" class="btn btn-secondary btn-sm js-clear-search">Clear search</button>'
-          : state.dashboardView || state.projectFilters.client
+          : viewMatcher(state.dashboardView) || state.projectFilters.client
             ? "No projects match this view filter."
             : hasAny
               ? "No projects to show. Enable Show archived, or create a new project."
@@ -3857,54 +3814,8 @@
         "</div>";
       return;
     }
-    grid.innerHTML = projects
-      .map((p) => {
-        const open = openTaskCount(p);
-        const blocked = blockedCount(p);
-        const overdue = overdueCount(p);
-        const cur = projectCurrentPhase(p);
-        return (
-          `<article class="project-card${p.archived ? " archived" : ""}${projectAtRisk(p) ? " at-risk" : ""}" data-id="${escapeHtml(p.id)}" tabindex="0" role="button">` +
-          `<div class="code">${escapeHtml(p.projectCode || "—")}</div>` +
-          `<h3>${escapeHtml(p.projectName || "Untitled")}</h3>` +
-          `<div class="meta">${escapeHtml(p.clientName || "No client")} · SO ${escapeHtml(p.salesOrderNumber || "—")}` +
-          (p.projectType ? ` · ${escapeHtml(p.projectType)}` : "") +
-          `</div>` +
-          (isSample(p) ? '<span class="sample-tag">SAMPLE</span>' : "") +
-          (p.archived ? '<span class="sample-tag" style="background:#eee;color:#555">ARCHIVED</span>' : "") +
-          (normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "approved" ? '<span class="pill signoff">Municipal approved</span>' : normalizeMunicipalSignOff(p.municipalSignOff, p.engineeringSignOff) === "pending" ? '<span class="pill muni-pending">Municipal pending</span>' : "") +
-          (isScfIssued(p)
-            ? `<span class="pill conformance issued">${escapeHtml(displayConformanceRef(p.conformanceRef) || "SCL issued")}</span>`
-            : hasConformance(p)
-              ? `<span class="pill conformance">${escapeHtml(conformanceLabel(p.conformanceStatus))}</span>`
-              : "") +
-          (isScfReady(p) ? '<span class="pill scf-ready">SCL ready</span>' : "") +
-          (!(p.invoiceNumber || "").trim() ? '<span class="pill gap">No INV</span>' : "") +
-          (!(p.address || "").trim() ? '<span class="pill gap">No address</span>' : "") +
-          (cur ? `<div class="stat-sub">Phase: ${escapeHtml(cur.name)}` +
-            (p.poNumber || p.popReference || p.invoiceNumber
-              ? ` · PO ${escapeHtml(p.poNumber || "—")} · INV ${escapeHtml(p.invoiceNumber || "—")}`
-              : "") +
-            `</div>`
-            : "") +
-          `<div class="task-summary">` +
-          `<span class="pill open">${open} open</span>` +
-          (blocked ? `<span class="pill blocked">${blocked} blocked</span>` : "") +
-          (overdue ? `<span class="pill overdue">${overdue} overdue</span>` : "") +
-          `</div></article>`
-        );
-      })
-      .join("");
-
-    grid.querySelectorAll(".project-card").forEach((card) => {
-      card.addEventListener("click", () => openProject(card.dataset.id));
-      card.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          openProject(card.dataset.id);
-        }
-      });
-    });
+    grid.innerHTML = projects.map((p) => projectCardHtml(p)).join("");
+    bindProjectCards(grid);
   }
 
   function openProject(id) {
