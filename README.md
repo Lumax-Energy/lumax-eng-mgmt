@@ -86,6 +86,8 @@ Chips also include: Clients · Engineer · Structure type · Structural Conforma
 
 Defaults (editable in Settings — add / edit / remove): RDN · Design check · Drawing · Eng task · Site visit · Calculation · Review · Coordination · Other.
 
+Load, Save and the task form never change a task's type or status. Removing a type only takes it out of the new-task list: its tasks keep it and show it as "(retired)". Removing a status that tasks still use asks first (with counts per engineer in team view) and moves those tasks to the first remaining status only on OK. A type or status that is not in the team list still gets its own board column, filter entry and Excel sheet/column.
+
 Tasks view includes a **Structure type** dropdown (project `structureTypes` / task override).
 
 **Hide completed** (Tasks filter bar) hides the Completed archive under the open-task list. Open tasks always stay visible. Preference is stored in `localStorage` (`lumax-eng-mgmt-ui`).

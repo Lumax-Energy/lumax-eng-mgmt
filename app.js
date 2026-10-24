@@ -751,8 +751,9 @@
     return !statusIsDone(statusId);
   }
   function typeLabel(typeId) {
+    if (!typeId) return "—";
     const t = getTaskTypes().find((x) => x.id === typeId);
-    return t ? t.name : typeId || "—";
+    return t ? t.name : entryLabel(retiredEntry("taskTypes", typeId), "type");
   }
   function isSample(project) {
     const code = project.projectCode || "";
@@ -900,13 +901,12 @@
 
   function taskTableRowHtml(t) {
     const p = t.projectId ? getProject(t.projectId) : null;
-    const st = getStatus(t.statusId);
     return (
       `<tr class="${isOverdue(t) ? "overdue" : ""}" data-task="${escapeHtml(t.id)}">` +
       `<td><span class="type-chip">${escapeHtml(typeLabel(t.type))}</span>${isLeader() && t._eng ? ` <span class="pill">${escapeHtml(t._eng)}</span>` : ""}</td>` +
       `<td>${escapeHtml(t.title)}</td>` +
       `<td>${escapeHtml(p ? p.projectCode || p.projectName : "—")}</td>` +
-      `<td>${escapeHtml(st ? st.name : t.statusId)}</td>` +
+      `<td>${escapeHtml(statusLabel(t.statusId))}</td>` +
       `<td>${escapeHtml(t.assignee || "—")}</td>` +
       `<td><span class="priority ${escapeHtml(t.priority)}">${escapeHtml(t.priority)}</span></td>` +
       `<td>${escapeHtml(t.dueDate || "—")}</td>` +
@@ -1067,6 +1067,49 @@
       }));
     }
     return DEFAULT_TASK_TYPES.map((t) => ({ ...t }));
+  }
+  // A type/status id a task still uses after the team list dropped it. In team view another engineer's
+  // own list may still name it; otherwise the id is the best label we have.
+  function retiredEntry(key, id) {
+    let found = null;
+    Object.keys(state.engSettings || {}).some((eng) => {
+      const list = (state.engSettings[eng] || {})[key];
+      found = (Array.isArray(list) && list.find((x) => x && x.id === id)) || null;
+      return !!found;
+    });
+    return { id, name: String((found && found.name) || id), retired: true };
+  }
+  // The lists plus any id the given tasks still use, so those tasks stay visible in the board, filters and Excel.
+  // New-task dropdowns and the Settings lists keep using getTaskTypes()/getStatuses().
+  function taskTypesInUse(tasks) {
+    const list = getTaskTypes();
+    const seen = new Set(list.map((x) => x.id));
+    (tasks || state.data.tasks || []).forEach((t) => {
+      if (!t || !t.type || seen.has(t.type)) return;
+      seen.add(t.type);
+      list.push(retiredEntry("taskTypes", t.type));
+    });
+    return list;
+  }
+  function statusesInUse(tasks) {
+    const list = getStatuses().slice();
+    const seen = new Set(list.map((x) => x.id));
+    (tasks || state.data.tasks || []).forEach((t) => {
+      if (!t || !t.statusId || seen.has(t.statusId)) return;
+      seen.add(t.statusId);
+      list.push(Object.assign(retiredEntry("taskStatuses", t.statusId), { color: "#9aa5b1", category: null }));
+    });
+    return list;
+  }
+  // Display name for a list entry from taskTypesInUse()/statusesInUse().
+  function entryLabel(x, kind) {
+    if (!x.retired) return x.name;
+    return x.name + (kind === "status" ? " (not in team list)" : " (retired)");
+  }
+  function statusLabel(statusId) {
+    if (!statusId) return "—";
+    const s = getStatus(statusId);
+    return s ? s.name : entryLabel(retiredEntry("taskStatuses", statusId), "status");
   }
   function normalizeMunicipalSignOff(v, legacyBool) {
     const s = String(v || "").toLowerCase().trim();
@@ -1510,16 +1553,16 @@
 
     // Tasks: v2 unified array, or migrate from nested + standaloneTasks
     if (Array.isArray(json.tasks) && json.tasks.length) {
-      data.tasks = json.tasks.map((t) => normalizeTask(t, version === 1, taskStatuses, taskTypes));
+      data.tasks = json.tasks.map((t) => normalizeTask(t, version === 1, taskStatuses));
     } else {
       const collected = [];
       projectsIn.forEach((p) => {
         (p.tasks || []).forEach((t) => {
-          collected.push(normalizeTask({ ...t, projectId: p.id }, true, taskStatuses, taskTypes));
+          collected.push(normalizeTask({ ...t, projectId: p.id }, true, taskStatuses));
         });
       });
       (json.standaloneTasks || []).forEach((t) => {
-        collected.push(normalizeTask({ ...t, projectId: t.projectId || null }, version === 1, taskStatuses, taskTypes));
+        collected.push(normalizeTask({ ...t, projectId: t.projectId || null }, version === 1, taskStatuses));
       });
       data.tasks = collected;
     }
@@ -1647,17 +1690,15 @@
     return byName ? byName.id : "status-todo";
   }
 
-  function normalizeTask(t, fromV1, statusList, typeList) {
+  function normalizeTask(t, fromV1, statusList) {
     let statusId = t.statusId ? safeId(t.statusId) : t.statusId;
     if (!statusId && t.status) statusId = mapLegacyStatus(t.status, statusList);
     if (!statusId) statusId = "status-todo";
 
-    let type = t.type || t.typeId || "eng_task";
+    // A type that isn't in the list is kept as-is (shown as retired), never remapped: Load and Save must not relabel work.
+    let type = t.type || t.typeId || "";
     if (type === "design-check") type = "design_check";
-    type = safeId(type);
-    // Validate against the incoming file's types, not whatever is currently loaded.
-    const knownTypes = typeList || (state.data && state.data.settings && state.data.settings.taskTypes) || DEFAULT_TASK_TYPES;
-    if (!knownTypes.some((x) => x.id === type) && !DEFAULT_TASK_TYPES.some((x) => x.id === type)) type = "eng_task";
+    type = safeId(type) || "eng_task";
 
     const task = {
       id: t.id ? safeId(t.id) : uid("task"),
@@ -2104,6 +2145,21 @@
       console.warn("registerEngineer failed", e);
     }
   }
+  // Type and status ids used by the tasks in a raw (not yet normalized) data file, in every layout normalizeData reads.
+  function usedTaskRefs(json) {
+    const types = new Set();
+    const statuses = new Set();
+    const add = (t) => {
+      if (!t || typeof t !== "object") return;
+      const ty = t.type || t.typeId;
+      if (ty) types.add(safeId(ty === "design-check" ? "design_check" : ty));
+      if (t.statusId) statuses.add(safeId(t.statusId));
+    };
+    (Array.isArray(json.tasks) ? json.tasks : []).forEach(add);
+    (Array.isArray(json.projects) ? json.projects : []).forEach((p) => p && Array.isArray(p.tasks) && p.tasks.forEach(add));
+    (Array.isArray(json.standaloneTasks) ? json.standaloneTasks : []).forEach(add);
+    return { types, statuses };
+  }
   // Shared lists (statuses, task/project/structure types) live in the shared repo so the team stays consistent.
   async function overlaySharedSettings(json) {
     if ((!myEngineerId() && !isViewer()) || !state.settings.pat) return;
@@ -2112,8 +2168,20 @@
       if (!f) return;
       const sh = JSON.parse(f.text);
       json.settings = json.settings && typeof json.settings === "object" ? json.settings : {};
+      const used = usedTaskRefs(json);
       SHARED_KEYS.forEach((k) => {
-        if (Array.isArray(sh[k]) && sh[k].length) json.settings[k] = sh[k];
+        if (!(Array.isArray(sh[k]) && sh[k].length)) return;
+        let next = sh[k];
+        // The shared list wins, but a type/status this file's tasks still use keeps its own entry (name, colour)
+        // so a shorter shared list never relabels or hides those tasks.
+        if (k === "taskTypes" || k === "taskStatuses") {
+          const inUse = k === "taskTypes" ? used.types : used.statuses;
+          const shared = new Set(sh[k].map((x) => safeId(x && x.id)));
+          const own = Array.isArray(json.settings[k]) ? json.settings[k] : [];
+          const keep = own.filter((x) => x && x.id && inUse.has(safeId(x.id)) && !shared.has(safeId(x.id)));
+          if (keep.length) next = sh[k].concat(keep);
+        }
+        json.settings[k] = next;
       });
     } catch (e) {
       toast("Could not read shared settings (" + e.message + ") — using your saved copy.", "error");
@@ -2764,13 +2832,15 @@
     }
 
     // ---- Scope ----
-    const statuses = getStatuses();
     const allProjects = (state.data.projects || []).filter(inScope);
     const allTasks = (state.data.tasks || []).filter(inScope);
+    // Types/statuses that tasks still use but the team list dropped get their own rows, columns and sheets.
+    const statuses = statusesInUse(allTasks);
+    const types = taskTypesInUse(allTasks);
     const f = state.taskFilters || {};
     const filterBits = [];
     if (f.type) filterBits.push("type: " + typeLabel(f.type));
-    if (f.statusId) filterBits.push("status: " + ((getStatus(f.statusId) || {}).name || f.statusId));
+    if (f.statusId) filterBits.push("status: " + statusLabel(f.statusId));
     if (f.assignee) filterBits.push("assignee: " + (f.assignee === "__unassigned__" ? "(unassigned)" : f.assignee));
     if (f.overdueOnly) filterBits.push("overdue only");
     if (f.projectId) filterBits.push("project: " + (f.projectId === "__standalone__" ? "standalone" : ((getProject(f.projectId) || {}).projectCode || "")));
@@ -2868,7 +2938,7 @@
       { label: "Client", w: 20, get: (t, p) => (p ? p.clientName : "") },
       { label: "Type", w: 14, get: (t) => typeLabel(t.type) },
       { label: "Title", w: 38, get: (t) => t.title },
-      { label: "Status", w: 12, get: (t) => (getStatus(t.statusId) || {}).name || t.statusId, style: (t, z) => statusStyle(t, z) },
+      { label: "Status", w: 12, get: (t) => statusLabel(t.statusId), style: (t, z) => statusStyle(t, z) },
       { label: "Phase", w: 14, opt: true, get: (t, p) => { const ph = p && (p.phases || []).find((x) => x.id === t.phaseId); return ph ? ph.name : ""; } },
       { label: "Assignee", w: 16, get: (t) => t.assignee || "" },
       { label: "Priority", w: 10, get: (t) => (PRIO[t.priority] || ["", t.priority || ""])[1], style: (t, z) => td(z, { font: font({ bold: t.priority === "high", color: { rgb: (PRIO[t.priority] || [C.text])[0] } }), alignment: { vertical: "top", horizontal: "center" } }) },
@@ -2968,12 +3038,12 @@
     const stCounts = statuses.map((s) => [s, openAll.filter((t) => t.statusId === s.id).length]).filter(([s]) => s.category !== "done");
     const stMax = Math.max(0, ...stCounts.map((x) => x[1]));
     stCounts.forEach(([s, n]) => {
-      d.row([s.name, n, bar(n, stMax), "", "", ""], (c) => (c === 0 ? td(false, { fill: fill(tint(s.color, 0.28)), font: font({ bold: true, color: { rgb: C.navy } }) }) : c === 1 ? num(false) : barStyle(tint(s.color, 0.9))));
+      d.row([entryLabel(s, "status"), n, bar(n, stMax), "", "", ""], (c) => (c === 0 ? td(false, { fill: fill(tint(s.color, 0.28)), font: font({ bold: true, color: { rgb: C.navy } }) }) : c === 1 ? num(false) : barStyle(tint(s.color, 0.9))));
     });
 
     d.section("Open work by type");
     d.row(["Type", "Open", "", "", "", ""], S.th);
-    const tyCounts = getTaskTypes().map((ty) => [ty.name, openAll.filter((t) => t.type === ty.id).length]).filter((x) => x[1] > 0);
+    const tyCounts = types.map((ty) => [entryLabel(ty, "type"), openAll.filter((t) => t.type === ty.id).length]).filter((x) => x[1] > 0);
     const tyMax = Math.max(0, ...tyCounts.map((x) => x[1]));
     tyCounts.forEach(([name, n], i) => d.row([name, n, bar(n, tyMax), "", "", ""], (c) => (c === 0 ? td(i % 2 === 1) : c === 1 ? num(i % 2 === 1) : barStyle(C.accent))));
     if (!tyCounts.length) d.band("No open tasks.", S.note);
@@ -3078,13 +3148,13 @@
     const sumW = statuses.length + 2;
     const sm = newSheet("Type × status (all tasks)", sumW);
     const sHead = sm.r;
-    sm.row(["Type"].concat(statuses.map((s) => s.name)).concat(["Total"]), (c) => (c > 0 && c <= statuses.length ? Object.assign({}, S.th, { fill: fill(C.navyMid), alignment: { horizontal: "center", vertical: "center", wrapText: true } }) : S.th), 22);
-    const maxCell = Math.max(1, ...getTaskTypes().flatMap((ty) => statuses.map((s) => allTasks.filter((t) => t.type === ty.id && t.statusId === s.id).length)));
-    getTaskTypes().forEach((ty, i) => {
+    sm.row(["Type"].concat(statuses.map((s) => entryLabel(s, "status"))).concat(["Total"]), (c) => (c > 0 && c <= statuses.length ? Object.assign({}, S.th, { fill: fill(C.navyMid), alignment: { horizontal: "center", vertical: "center", wrapText: true } }) : S.th), 22);
+    const maxCell = Math.max(1, ...types.flatMap((ty) => statuses.map((s) => allTasks.filter((t) => t.type === ty.id && t.statusId === s.id).length)));
+    types.forEach((ty, i) => {
       const counts = statuses.map((s) => allTasks.filter((t) => t.type === ty.id && t.statusId === s.id).length);
       const total = counts.reduce((a, b) => a + b, 0);
       if (!total) return;
-      sm.row([ty.name].concat(counts).concat([total]), (c) =>
+      sm.row([entryLabel(ty, "type")].concat(counts).concat([total]), (c) =>
         c === 0 ? td(i % 2 === 1, { font: font({ bold: true }) })
         : c === sumW - 1 ? S.total
         : counts[c - 1] ? num(false, { fill: fill(tint(C.accent, 0.12 + 0.5 * (counts[c - 1] / maxCell))), font: font({ bold: true, color: { rgb: C.navy } }) })
@@ -3111,13 +3181,13 @@
     add("By Project", groupedSheet("Tasks by project", allTasks, (t) => { const p = t.projectId && getProject(t.projectId); return p ? (p.projectCode || "") + "  " + (p.projectName || "") : "~Standalone"; }, (k) => (k === "~Standalone" ? "Standalone tasks" : k.trim())), "7FB0F3");
     // One sheet per task type that has tasks (includes custom types like Report writing).
     const used = new Set(wb.SheetNames.map((n) => n.toLowerCase()));
-    getTaskTypes().forEach((ty) => {
+    types.forEach((ty) => {
       const list = filteredTasks.filter((t) => t.type === ty.id);
       if (!list.length) return;
-      let name = String(ty.name || ty.id).replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || ty.id;
+      let name = String(entryLabel(ty, "type") || ty.id).replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || ty.id;
       while (used.has(name.toLowerCase())) name = (name.slice(0, 28) + " " + Math.random().toString(36).slice(2, 4));
       used.add(name.toLowerCase());
-      add(name, taskSheet(ty.name, list, filterActive ? "Filtered: " + filterBits.join(", ") : ""), "B7D3F8");
+      add(name, taskSheet(entryLabel(ty, "type"), list, filterActive ? "Filtered: " + filterBits.join(", ") : ""), "B7D3F8");
     });
     add("Summary", summaryWs, C.navy);
 
@@ -3481,8 +3551,8 @@
     }
 
     const tasks = (state.data.tasks || []).filter(isLiveTask);
-    const statuses = getStatuses();
     const open = tasks.filter((t) => statusIsOpen(t.statusId));
+    const statuses = statusesInUse(open);
     const overdue = tasks.filter((t) => isOverdue(t));
     const due7 = tasks.filter((t) => isDueWithin(t, 7));
     const myName = (state.data.settings.myAssignee || "").trim();
@@ -3511,7 +3581,7 @@
     const assigneeRows = Object.entries(assigneeMap).sort((a, b) => b[1].overdue - a[1].overdue);
 
     // By type
-    const byType = getTaskTypes().map((ty) => ({
+    const byType = taskTypesInUse(open).map((ty) => ({
       ty,
       n: tasks.filter((t) => t.type === ty.id && statusIsOpen(t.statusId)).length,
     }));
@@ -3561,7 +3631,7 @@
         .map((x) => {
           const pct = Math.round((x.n / maxStatus) * 100);
           return (
-            `<div class="bar-row"><div class="bar-label"><button type="button" class="linkish dash-filter-status" data-status="${escapeHtml(x.s.id)}">${escapeHtml(x.s.name)}</button><span>${x.n}</span></div>` +
+            `<div class="bar-row"><div class="bar-label"><button type="button" class="linkish dash-filter-status" data-status="${escapeHtml(x.s.id)}">${escapeHtml(entryLabel(x.s, "status"))}</button><span>${x.n}</span></div>` +
             `<div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${escapeHtml(x.s.color || "#2f80ed")}"></div></div></div>`
           );
         })
@@ -3571,7 +3641,7 @@
       byType
         .map(
           (x) =>
-            `<div class="stat-row"><button type="button" class="linkish dash-filter-type" data-type="${escapeHtml(x.ty.id)}">${escapeHtml(x.ty.name)}</button><span>${x.n}</span></div>`
+            `<div class="stat-row"><button type="button" class="linkish dash-filter-type" data-type="${escapeHtml(x.ty.id)}">${escapeHtml(entryLabel(x.ty, "type"))}</button><span>${x.n}</span></div>`
         )
         .join("") +
       `</div>` +
@@ -3950,7 +4020,8 @@
   }
 
   function renderBoard(container, tasks, projectCtx) {
-    const statuses = getStatuses();
+    // A task whose status left the team list gets its own column instead of vanishing from the board.
+    const statuses = statusesInUse(tasks);
     container.innerHTML = statuses
       .map((st) => {
         const colTasks = tasks.filter((t) => t.statusId === st.id);
@@ -3979,8 +4050,9 @@
           })
           .join("");
         return (
-          `<div class="column status-drop" data-status="${escapeHtml(st.id)}">` +
-          `<div class="column-header"><span class="dot" style="background:${escapeHtml(st.color || "#6b7c93")}"></span><span>${escapeHtml(st.name)}</span><span class="count">${colTasks.length}</span></div>` +
+          // Retired columns only let cards leave: nothing new should be moved into a status the team removed.
+          `<div class="column${st.retired ? " column-retired" : " status-drop"}" data-status="${escapeHtml(st.id)}"${st.retired ? ' title="This status is not in the team list. Drag a card to another column to move it."' : ""}>` +
+          `<div class="column-header"><span class="dot" style="background:${escapeHtml(st.color || "#6b7c93")}"></span><span>${escapeHtml(entryLabel(st, "status"))}</span><span class="count">${colTasks.length}</span></div>` +
           (cards || '<div class="column-empty">No tasks</div>') +
           `</div>`
         );
@@ -4023,7 +4095,7 @@
         else t.doneDate = null;
         t.updatedAt = nowIso();
         cacheDataLocally();
-        toast(localSaveHint("Moved to " + ((getStatus(statusId) || {}).name || statusId)), "success");
+        toast(localSaveHint("Moved to " + statusLabel(statusId)), "success");
         render();
       });
     });
@@ -4065,7 +4137,9 @@
   // ---------- Tasks nav ----------
   function renderTasksView() {
     const root = document.getElementById("view-tasks");
-    const statuses = getStatuses();
+    // Include types/statuses that tasks still use but the team list dropped, so those tasks can be found.
+    const statuses = statusesInUse();
+    const types = taskTypesInUse();
     const assignees = [...new Set((state.data.tasks || []).map((t) => t.assignee).filter(Boolean))].sort();
     const f = state.taskFilters;
 
@@ -4073,8 +4147,8 @@
     const completedArchiveCount = completedTasksMatchingFilters().length;
     const filterBar =
       `<div class="filter-row">` +
-      `<select id="tf-filter-type"><option value="">All types</option>${getTaskTypes().map((ty) => `<option value="${escapeHtml(ty.id)}"${f.type === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`).join("")}</select>` +
-      `<select id="tf-filter-status"><option value="">All statuses</option>${statuses.map((s) => `<option value="${escapeHtml(s.id)}"${f.statusId === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`).join("")}</select>` +
+      `<select id="tf-filter-type"><option value="">All types</option>${types.map((ty) => `<option value="${escapeHtml(ty.id)}"${f.type === ty.id ? " selected" : ""}>${escapeHtml(entryLabel(ty, "type"))}</option>`).join("")}</select>` +
+      `<select id="tf-filter-status"><option value="">All statuses</option>${statuses.map((s) => `<option value="${escapeHtml(s.id)}"${f.statusId === s.id ? " selected" : ""}>${escapeHtml(entryLabel(s, "status"))}</option>`).join("")}</select>` +
       `<select id="tf-filter-assignee"><option value="">All assignees</option><option value="__unassigned__"${f.assignee === "__unassigned__" ? " selected" : ""}>(unassigned)</option>${assignees.map((a) => `<option value="${escapeHtml(a)}"${f.assignee === a ? " selected" : ""}>${escapeHtml(a)}</option>`).join("")}</select>` +
       `<select id="tf-filter-project"><option value="">All projects</option><option value="__standalone__"${f.projectId === "__standalone__" ? " selected" : ""}>Standalone only</option>${(state.data.projects || []).map((p) => `<option value="${escapeHtml(p.id)}"${f.projectId === p.id ? " selected" : ""}>${escapeHtml(p.projectCode || p.projectName)}</option>`).join("")}</select>` +
       `<select id="tf-filter-structure" title="Structure type"><option value="">All structure types</option>${structureTypes.map((s) => `<option value="${escapeHtml(s)}"${f.structureType === s ? " selected" : ""}>${escapeHtml(s)}</option>`).join("")}</select>` +
@@ -4895,6 +4969,8 @@
     function addTaskTypeRow(tt) {
       const row = document.createElement("div");
       row.className = "dyn-row";
+      // Existing ids are kept exactly as stored (not re-slugged), or their tasks would lose their type.
+      if (tt && tt.id) row.dataset.id = tt.id;
       row.innerHTML =
         `<input class="tt-id" value="${escapeHtml((tt && tt.id) || "")}" placeholder="id (e.g. site_visit)" style="max-width:28%"${tt && tt.id ? ' readonly title="Ids are fixed once created (tasks reference them). Remove and re-add to change."' : ""} />` +
         `<input class="tt-name" value="${escapeHtml((tt && tt.name) || "")}" placeholder="Label" />` +
@@ -5002,7 +5078,7 @@
       const nextTaskTypes = [];
       const seenTt = new Set();
       ttBox.querySelectorAll(".dyn-row").forEach((row) => {
-        let id = row.querySelector(".tt-id").value.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_\-]/g, "");
+        let id = row.dataset.id || row.querySelector(".tt-id").value.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_\-]/g, "");
         const name = row.querySelector(".tt-name").value.trim();
         if (!name) return;
         if (!id) id = name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_\-]/g, "") || uid("tt");
@@ -5012,6 +5088,34 @@
       });
       if (!nextTaskTypes.length) {
         toast("Keep at least one task type", "error");
+        return;
+      }
+      // Only an unlocked leader with their own repo edits the shared lists; for everyone else they stay as loaded.
+      const listsEditable = isLeader() && canEdit();
+      // Tasks on a status the leader removed move only after an explicit OK. Tasks on a status that was
+      // never in the list are left alone. Types never move tasks: a removed type just leaves the new-task list.
+      const keptStatusIds = new Set(nextStatuses.map((x) => x.id));
+      const fallbackStatus = nextStatuses[0];
+      const toMove = [];
+      const moveLines = [];
+      (listsEditable ? getStatuses() : []).forEach((st) => {
+        if (keptStatusIds.has(st.id)) return;
+        const users = (state.data.tasks || []).filter((t) => t.statusId === st.id);
+        if (!users.length) return;
+        toMove.push(...users);
+        let line = users.length + (users.length === 1 ? " task uses '" : " tasks use '") + st.name + "'";
+        if (isLeader()) {
+          const by = {};
+          users.forEach((t) => {
+            const e = t._eng || myEngineerId();
+            by[e] = (by[e] || 0) + 1;
+          });
+          line += " (" + Object.keys(by).sort().map((e) => e + " " + by[e]).join(", ") + ")";
+        }
+        moveLines.push(line + ".");
+      });
+      if (toMove.length && !window.confirm(moveLines.join("\n") + "\n\nOK = move them to '" + fallbackStatus.name + "'; Cancel = go back.")) {
+        toast("Settings not saved — nothing was changed. Keep the status, or Save again and choose OK to move its tasks.", "error");
         return;
       }
       // Everything validated: from here on, apply.
@@ -5038,12 +5142,13 @@
       const nextPat = document.getElementById("set-pat").value.trim();
       if (nextPat) state.settings.pat = nextPat;
       saveBrowserSettings();
-      const valid = new Set(nextStatuses.map((s) => s.id));
-      const fallback = nextStatuses[0].id;
-      (state.data.tasks || []).forEach((t) => {
-        if (!valid.has(t.statusId)) t.statusId = fallback;
+      if (listsEditable) state.data.settings.taskStatuses = nextStatuses;
+      const stamp = nowIso();
+      toMove.forEach((t) => {
+        t.statusId = fallbackStatus.id;
+        if (fallbackStatus.category === "done" && !t.doneDate) t.doneDate = todayStr();
+        t.updatedAt = stamp;
       });
-      state.data.settings.taskStatuses = nextStatuses;
       state.data.settings.myAssignee = document.getElementById("set-my-name").value.trim();
       const yr = Number(document.getElementById("set-scf-year").value);
       const seq = Number(document.getElementById("set-scf-seq").value);
@@ -5056,11 +5161,8 @@
         address: document.getElementById("set-eng-addr").value.trim() || DEFAULT_ENGINEER.address,
         contact: document.getElementById("set-eng-contact").value.trim() || DEFAULT_ENGINEER.contact,
       };
-      const validTypes = new Set(nextTaskTypes.map((t) => t.id));
-      (state.data.tasks || []).forEach((t) => {
-        if (!validTypes.has(t.type)) t.type = nextTaskTypes[0].id;
-      });
-      state.data.settings.taskTypes = nextTaskTypes;
+      // A removed type keeps its tasks as they are (shown as retired); it only leaves the new-task dropdown.
+      if (listsEditable) state.data.settings.taskTypes = nextTaskTypes;
 
       const nextProjectTypes = [];
       ptBox.querySelectorAll(".dyn-row").forEach((row) => {
@@ -5079,10 +5181,12 @@
         ? nextStructureTypes
         : DEFAULT_STRUCTURE_TYPES.slice();
       cacheDataLocally();
+      // Moved tasks are real edits: show them as unsaved so Save pushes them (and merges treat them as changes).
+      if (toMove.length) setDirty(true);
       closeOverlay();
       updateAuthBadge();
       updateLeaderUi();
-      toast(localSaveHint("Settings saved"), "success");
+      toast(localSaveHint(toMove.length ? "Settings saved, " + toMove.length + " task(s) moved to " + fallbackStatus.name : "Settings saved"), "success");
       state.ownRepoOk = null;
       if (state.settings.role !== "engineer" && !leaderUnlocked) unlockLeader();
       else checkOwnRepo();
@@ -5457,16 +5561,25 @@
         )
         .join("");
 
-    const statusOpts = statuses
-      .map(
-        (s) =>
-          `<option value="${escapeHtml(s.id)}"${(t ? t.statusId : "status-todo") === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`
-      )
-      .join("");
+    // A task whose type or status left the team list keeps it: offer it first and selected, so opening
+    // and saving the task never quietly switches it to whatever the browser shows first.
+    const types = getTaskTypes();
+    const keepOpt = (id, key) =>
+      `<option value="${escapeHtml(id)}" selected>${escapeHtml(retiredEntry(key, id).name + " (not in team list)")}</option>`;
+    const statusOpts =
+      (t && t.statusId && !statuses.some((s) => s.id === t.statusId) ? keepOpt(t.statusId, "taskStatuses") : "") +
+      statuses
+        .map(
+          (s) =>
+            `<option value="${escapeHtml(s.id)}"${(t ? t.statusId : "status-todo") === s.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`
+        )
+        .join("");
 
-    const typeOpts = getTaskTypes().map(
-      (ty) => `<option value="${escapeHtml(ty.id)}"${initialType === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`
-    ).join("");
+    const typeOpts =
+      (t && t.type && !types.some((x) => x.id === t.type) ? keepOpt(t.type, "taskTypes") : "") +
+      types.map(
+        (ty) => `<option value="${escapeHtml(ty.id)}"${initialType === ty.id ? " selected" : ""}>${escapeHtml(ty.name)}</option>`
+      ).join("");
 
     showOverlay(
       `<div class="panel wide" role="dialog">` +
@@ -5603,8 +5716,11 @@
       } else {
         payload.discipline = (document.getElementById("tf-discipline") || {}).value || "";
       }
-      if (statusIsDone(statusId) && !payload.doneDate) payload.doneDate = todayStr();
-      if (!statusIsDone(statusId)) payload.doneDate = null;
+      // A status outside the team list has no known category: leave the completed date as entered.
+      if (getStatus(statusId)) {
+        if (statusIsDone(statusId) && !payload.doneDate) payload.doneDate = todayStr();
+        if (!statusIsDone(statusId)) payload.doneDate = null;
+      }
 
       if (isEdit) {
         Object.assign(t, payload);

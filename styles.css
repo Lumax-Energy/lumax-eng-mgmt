@@ -213,6 +213,8 @@ a { color: var(--accent); }
   overflow-x: auto;
 }
 .column { background: #e9eef5; border-radius: var(--radius); padding: 0.75rem; min-height: 180px; min-width: 160px; }
+/* A status no longer in the team list: tasks stay visible here until moved. */
+.column.column-retired { border: 1px dashed #9aa5b1; }
 .column-header {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 0.65rem; font-weight: 600; font-size: 0.85rem;
