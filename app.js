@@ -7,14 +7,20 @@
   if (window.__LUMAX_ENG_MGMT_BOOTED) return;
   window.__LUMAX_ENG_MGMT_BOOTED = true;
 
+  // One key holds a tab's whole local copy {v, sha, dirty, data, tab, at, id, parent}, written in a
+  // single setItem so data, sha and the unsaved flag can never come from different tabs or moments.
+  const LS_SYNC = "lumax-eng-mgmt-sync";
+  // Old separate keys: read once to migrate into LS_SYNC, then removed.
   const LS_DATA = "lumax-eng-mgmt-data";
-  const LS_SETTINGS = "lumax-eng-mgmt-settings";
-  const LS_UI = "lumax-eng-mgmt-ui";
   const LS_SHA = "lumax-eng-mgmt-sha";
   const LS_DIRTY = "lumax-eng-mgmt-dirty";
+  const LS_SETTINGS = "lumax-eng-mgmt-settings";
+  const LS_UI = "lumax-eng-mgmt-ui";
   const LS_BACKUP = "lumax-eng-mgmt-backup";
   const LS_LEADER = "lumax-eng-mgmt-leader-unlocked";
+  // {sha, data}: the merge base, only trusted when its sha matches the snapshot's sha.
   const LS_BASE = "lumax-eng-mgmt-base";
+  const TAB_ID = uid("tab");
   const DEFAULT_OWNER = "Lumax-Energy";
   const DEFAULT_REPO = "lumax-eng-mgmt";
   const DATA_PATH = "data/projects.json";
@@ -204,6 +210,13 @@
     done: "status-done",
   };
 
+  const BOOT_SNAP = readLocalSnapshot();
+  // Id of the snapshot this tab last wrote or adopted; another tab's write that names it as its
+  // parent was made on top of everything this tab has, so adopting it cannot lose anything.
+  let lastSnapId = BOOT_SNAP.id;
+  let bootNote = BOOT_SNAP.note || "";
+  let legacyKeysPending = BOOT_SNAP.pending;
+
   let state = {
     data: emptyData(),
     view: "dashboard", // dashboard | projects | tasks | detail
@@ -217,14 +230,9 @@
     tasksMode: "list", // list | board
     settings: loadBrowserSettings(),
     githubUser: null,
-    fileSha: localStorage.getItem(LS_SHA) || null,
-    baseData: (function () {
-      try {
-        return JSON.parse(localStorage.getItem(LS_BASE) || "null");
-      } catch (_) {
-        return null;
-      }
-    })(),
+    fileSha: BOOT_SNAP.sha,
+    baseData: BOOT_SNAP.base,
+    staleTab: false, // another tab changed the data while this one held unsaved work: edits blocked, Save allowed
     teamLoaded: false,
     ownRepoOk: null,
     engFilter: "all",
@@ -420,33 +428,150 @@
   }
   let cacheWarned = false;
   // Any local cache write is an edit until a Load/Save/Import marks it clean.
-  let dirty = (function () {
-    try {
-      return localStorage.getItem(LS_DIRTY) === "1";
-    } catch (_) {
-      return false;
-    }
-  })();
-  function setDirty(v) {
-    dirty = !!v;
-    try {
-      localStorage.setItem(LS_DIRTY, dirty ? "1" : "0");
-    } catch (_) {}
+  let dirty = BOOT_SNAP.dirty;
+  function showDirty() {
     const b = document.getElementById("btn-save");
     if (b) b.classList.toggle("unsaved", dirty);
   }
-  function cacheDataLocally() {
+  function setDirty(v) {
+    dirty = !!v;
     try {
-      localStorage.setItem(LS_DATA, JSON.stringify(state.data));
-      if (state.fileSha) localStorage.setItem(LS_SHA, state.fileSha);
+      persistLocal();
+    } catch (_) {}
+    showDirty();
+  }
+  function cacheDataLocally() {
+    dirty = roleCanEdit();
+    try {
+      persistLocal();
     } catch (e) {
       console.warn("localStorage cache failed", e);
-      if (!cacheWarned && canEdit()) {
+      if (!cacheWarned && roleCanEdit()) {
         cacheWarned = true;
         toast("Browser storage is full or blocked — changes are NOT cached locally. Save to GitHub or use Backup now.", "error");
       }
     }
-    setDirty(canEdit());
+    showDirty();
+  }
+  // The stored merge base, but only when it is the copy of GitHub at `sha` (else null).
+  function storedBaseFor(sha) {
+    if (!sha) return null;
+    try {
+      const b = JSON.parse(localStorage.getItem(LS_BASE) || "null");
+      return b && b.sha === sha && b.data && typeof b.data === "object" ? b.data : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function storedBaseSha() {
+    try {
+      const b = JSON.parse(localStorage.getItem(LS_BASE) || "null");
+      return b && typeof b === "object" && Object.prototype.hasOwnProperty.call(b, "sha") ? b.sha : undefined;
+    } catch (_) {
+      return undefined;
+    }
+  }
+  function writeBase() {
+    try {
+      if (state.baseData && state.fileSha) localStorage.setItem(LS_BASE, JSON.stringify({ sha: state.fileSha, data: state.baseData }));
+      else localStorage.removeItem(LS_BASE);
+    } catch (_) {
+      // A base we could not replace may belong to another sha; startup ignores it unless the shas match.
+      try {
+        localStorage.removeItem(LS_BASE);
+      } catch (_) {}
+    }
+  }
+  // Writes this tab's data, sha and unsaved flag as one snapshot. The base is rewritten first whenever
+  // the stored one belongs to another sha, so the last writer always leaves a matching pair behind.
+  // Throws when storage is full or blocked.
+  function persistLocal() {
+    const sha = state.fileSha || null;
+    if (storedBaseSha() !== sha) writeBase();
+    const id = uid("snap");
+    localStorage.setItem(
+      LS_SYNC,
+      JSON.stringify({ v: 1, sha, dirty: !!dirty, data: state.data, tab: TAB_ID, at: nowIso(), id, parent: lastSnapId || null })
+    );
+    lastSnapId = id;
+    // The start-up migration could not write; their content is in this snapshot now.
+    if (legacyKeysPending) {
+      legacyKeysPending = false;
+      try {
+        [LS_DATA, LS_SHA, LS_DIRTY].forEach((k) => localStorage.removeItem(k));
+      } catch (_) {}
+    }
+  }
+  // Reads the snapshot (moving the old separate keys into it once). Never throws.
+  function readLocalSnapshot() {
+    let snap = null;
+    try {
+      snap = JSON.parse(localStorage.getItem(LS_SYNC) || "null");
+    } catch (_) {}
+    if (!snap || typeof snap !== "object") snap = null;
+    const out = migrateOldKeys(snap) || { v: 1, sha: null, dirty: false, data: null, id: null };
+    return {
+      data: out.data && typeof out.data === "object" ? out.data : null,
+      sha: out.sha || null,
+      dirty: !!out.dirty,
+      base: storedBaseFor(out.sha || null),
+      id: out.id || null,
+      note: out.note || "",
+      pending: !!out.pending,
+    };
+  }
+  // Old layout: data, sha and the unsaved flag in three keys written at different times, so after a
+  // reload they could come from different tabs. Their merge base is not trusted (dropped), so a
+  // conflicting Save asks before merging. The old keys go only once LS_SYNC holds their content.
+  function migrateOldKeys(current) {
+    let raw, sha, oldDirty;
+    try {
+      raw = localStorage.getItem(LS_DATA);
+      sha = localStorage.getItem(LS_SHA);
+      oldDirty = localStorage.getItem(LS_DIRTY) === "1";
+    } catch (_) {
+      return current;
+    }
+    if (raw == null && sha == null && !oldDirty) {
+      try {
+        localStorage.removeItem(LS_DIRTY); // a lone "0"
+      } catch (_) {}
+      return current;
+    }
+    let data = null;
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch (_) {}
+    if (!data || typeof data !== "object") data = null;
+    let snap = current;
+    let note = "";
+    // With LS_SYNC already present, old keys can only come from a tab still running the previous
+    // version. Its unsaved edits win over a clean snapshot; if both hold unsaved edits, the snapshot
+    // stays and the old copy goes to the browser backup.
+    if (current && oldDirty && data) {
+      if (current.dirty) {
+        try {
+          localStorage.setItem(LS_BACKUP, JSON.stringify({ at: nowIso(), data }));
+          note = "Another tab running an older version of this app left unsaved changes. This tab kept its own; Undo switches to that other copy.";
+        } catch (_) {
+          return current; // keep the old keys rather than lose that copy
+        }
+      } else current = null;
+    }
+    if (!current) {
+      snap = { v: 1, sha: sha || null, dirty: oldDirty, data, tab: TAB_ID, at: nowIso(), id: uid("snap"), parent: null };
+      try {
+        localStorage.removeItem(LS_BASE);
+        localStorage.setItem(LS_SYNC, JSON.stringify(snap));
+      } catch (_) {
+        // Storage full: work from memory and keep the old keys until a snapshot write succeeds.
+        return Object.assign({}, snap, { pending: true });
+      }
+    }
+    try {
+      [LS_DATA, LS_SHA, LS_DIRTY].forEach((k) => localStorage.removeItem(k));
+    } catch (_) {}
+    return note ? Object.assign({}, snap, { note }) : snap;
   }
   // Keep a copy of the current data before anything replaces it wholesale.
   function backupCurrentData() {
@@ -459,10 +584,7 @@
   // The copy of my own file as it was on GitHub at state.fileSha; the reference for three-way merges.
   function setBase(data) {
     state.baseData = data ? JSON.parse(JSON.stringify(data)) : null;
-    try {
-      if (state.baseData) localStorage.setItem(LS_BASE, JSON.stringify(state.baseData));
-      else localStorage.removeItem(LS_BASE);
-    } catch (_) {}
+    writeBase();
   }
   // Anything that replaces state.data with something other than a full team load
   // makes the per-engineer bookkeeping meaningless; drop it so leader Save cannot act on it.
@@ -488,12 +610,113 @@
       return false;
     }
   }
+  let reloadConfirmed = false;
   window.addEventListener("beforeunload", (e) => {
-    if (dirty) {
+    if (dirty && !reloadConfirmed) {
       e.preventDefault();
       e.returnValue = "";
     }
   });
+
+  // ---------- Other tabs of this app in the same browser ----------
+  function overlayOpen() {
+    const ov = document.getElementById("overlay");
+    return !!(ov && ov.classList && !ov.classList.contains("hidden"));
+  }
+  // The repo this tab's data belongs to must still be the one in the shared browser settings.
+  function sameRepoAsStored() {
+    const s = loadBrowserSettings();
+    return s.owner === state.settings.owner && s.repo === state.settings.repo && s.engineerId === state.settings.engineerId;
+  }
+  let otherTabRenderTimer = null;
+  function onOtherTabWrite(e) {
+    if (!e || e.key !== LS_SYNC || !e.newValue) return;
+    let snap;
+    try {
+      snap = JSON.parse(e.newValue);
+    } catch (_) {
+      return;
+    }
+    if (!snap || typeof snap !== "object" || snap.tab === TAB_ID) return;
+    // Written on top of this tab's latest snapshot: it already holds everything this tab has.
+    const builtOnMine = !!snap.parent && snap.parent === lastSnapId;
+    const busy = state.teamLoaded || !!state.syncOp || overlayOpen() || !sameRepoAsStored();
+    if (!busy && (builtOnMine || !dirty)) {
+      adoptOtherTab(snap);
+      return;
+    }
+    if (roleCanEdit()) markStale();
+  }
+  function adoptOtherTab(snap) {
+    state.data = normalizeData(snap.data);
+    state.fileSha = snap.sha || null;
+    state.baseData = storedBaseFor(state.fileSha);
+    state.loadedThisSession = false; // as after a reload
+    forgetTeamState();
+    dirty = !!snap.dirty;
+    lastSnapId = snap.id || null;
+    state.staleTab = false;
+    hideStaleBanner();
+    showDirty();
+    // One render and one note for a burst of writes (a Save writes twice).
+    clearTimeout(otherTabRenderTimer);
+    otherTabRenderTimer = setTimeout(() => {
+      updateLeaderUi();
+      render();
+      toast("Updated from another tab", "success");
+    }, 120);
+  }
+  // Edits stop until this tab saves (merged through GitHub) or reloads; Save itself stays allowed.
+  function markStale() {
+    if (state.staleTab) return;
+    state.staleTab = true;
+    showStaleBanner();
+    updateLeaderUi();
+    render();
+  }
+  function clearStale() {
+    if (!state.staleTab) return;
+    state.staleTab = false;
+    hideStaleBanner();
+    updateLeaderUi();
+    render();
+  }
+  function showStaleBanner() {
+    const bar = document.getElementById("status-bar");
+    if (!bar || !bar.appendChild || document.getElementById("stale-banner")) return;
+    const el = document.createElement("div");
+    el.id = "stale-banner";
+    el.className = "toast warning stale-banner";
+    el.setAttribute("role", "alert");
+    const text = document.createElement("div");
+    text.textContent = "Your data was changed in another tab. Save this tab's changes (they will be merged) or Reload.";
+    el.appendChild(text);
+    const row = document.createElement("div");
+    row.className = "stale-actions";
+    [
+      ["Save", () => saveToGithub()],
+      ["Reload", reloadThisTab],
+    ].forEach(([label, fn]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "toast-action";
+      b.textContent = label;
+      b.onclick = fn;
+      row.appendChild(b);
+    });
+    el.appendChild(row);
+    bar.insertBefore(el, bar.firstChild);
+  }
+  function hideStaleBanner() {
+    const el = document.getElementById("stale-banner");
+    if (el && el.remove) el.remove();
+  }
+  function reloadThisTab() {
+    if (!confirmDiscardUnsaved("Reloading this tab")) return;
+    if (dirty) backupCurrentData();
+    reloadConfirmed = true;
+    location.reload();
+  }
   function utf8FromBase64(b64) {
     const bin = atob(String(b64 || "").replace(/\s/g, ""));
     return new TextDecoder("utf-8").decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
@@ -663,13 +886,6 @@
     // A dismissed (or browser-blocked) dialog must never look like "nothing happened".
     if (!ok) toast("Cancelled — nothing was changed. (If no dialog appeared, your browser may be blocking pop-ups for this page.)", "error");
     return ok;
-  }
-  function loadCachedData() {
-    try {
-      const raw = localStorage.getItem(LS_DATA);
-      if (raw) return JSON.parse(raw);
-    } catch (_) {}
-    return null;
   }
   function getProject(id) {
     return (state.data.projects || []).find((p) => p.id === id);
@@ -1799,6 +2015,7 @@
       state.loadedThisSession = true;
       cacheDataLocally();
       setDirty(false);
+      clearStale();
       lockEngineerId();
       markLastSync("Load");
       render();
@@ -1961,6 +2178,7 @@
       setBase(dataForRepo());
       cacheDataLocally();
       setDirty(false);
+      clearStale();
       markLastSync("Save");
       toast("Saved to GitHub", "success");
       lockEngineerId();
@@ -2011,17 +2229,28 @@
     return leaderUnlocked && ((state.settings.role === "leader" && !!myEngineerId()) || isViewer());
   }
   // Only engineers and leaders who have their own repo may change data. Viewers never can.
-  function canEdit() {
+  function roleCanEdit() {
     if (isViewer()) return false;
     if (!myEngineerId()) return false;
     if (isLeader()) return state.ownRepoOk === true;
     return true;
   }
+  // New edits also wait while another tab has changed the data (Save and Load still work).
+  function canEdit() {
+    return roleCanEdit() && !state.staleTab;
+  }
   function readOnlyReason() {
+    if (state.staleTab && roleCanEdit()) return "Changed in another tab — Save or Reload first.";
     if (isViewer()) return "Viewer mode is read-only.";
     if (!myEngineerId()) return "Set your Engineer ID in Settings before making changes.";
     if (state.ownRepoOk === null || state.ownRepoOk === undefined) return "Checking your repo — try again in a moment.";
     return "The team view is read-only for you: your own repo (" + engineerRepo(myEngineerId()) + ") is missing or your token cannot reach it.";
+  }
+  // body.read-only hides every control that changes data; body.stale-tab keeps Save visible among them.
+  function applyEditClasses() {
+    if (!document.body || !document.body.classList) return;
+    document.body.classList.toggle("read-only", !canEdit());
+    document.body.classList.toggle("stale-tab", !!state.staleTab);
   }
   // Returns true (and explains why) when the current user may not change data.
   function guardEdit() {
@@ -2355,7 +2584,7 @@
       ro.classList.toggle("hidden", canEdit());
       ro.title = readOnlyReason();
     }
-    if (document.body) document.body.classList.toggle("read-only", !canEdit());
+    applyEditClasses();
     if (sel) {
       const show = isLeader();
       sel.classList.toggle("hidden", !show);
@@ -2453,6 +2682,7 @@
       state.loadedThisSession = true;
       cacheDataLocally();
       setDirty(false);
+      clearStale();
       markLastSync("Load (all)");
       updateLeaderUi();
       render();
@@ -2470,13 +2700,12 @@
     }
   }
   // Engineer mode and leader mode must agree on which version of my own file was last synced.
+  // The caller's next cache write stores this sha in one snapshot with the data; until then the
+  // stored base no longer matches the stored sha, so a reload in between just starts without a base.
   function syncOwnMarkers(sha, data) {
     state.fileSha = sha;
     setBase(Object.assign({}, data, { projects: (data.projects || []).map(stripTag), tasks: (data.tasks || []).map(stripTag) }));
     state.loadedThisSession = true;
-    try {
-      localStorage.setItem(LS_SHA, sha);
-    } catch (_) {}
   }
   // An engineer's own settings (name, ECSA no, letter sequence) are never replaced by the leader's.
   function settingsFor(id) {
@@ -2575,6 +2804,7 @@
         return false;
       }
       setDirty(false);
+      clearStale();
       markLastSync("Save (all)");
       toast(saved ? "Saved " + saved + " engineer repo(s)" : "Nothing to save", "success");
       render();
@@ -2600,7 +2830,11 @@
   }
   function saveToGithub() {
     // Without an Engineer ID the old code saved into the public app repo; never do that.
-    if (guardEdit()) return Promise.resolve(false);
+    // A stale tab may still save: its sha and merge base match each other, so GitHub merges it.
+    if (!roleCanEdit()) {
+      toast(readOnlyReason(), "error");
+      return Promise.resolve(false);
+    }
     return isLeader() ? saveAllToGithub() : saveEngineerData();
   }
   // Company-wide letter numbers: reserved in the shared repo before the letter is issued.
@@ -2768,21 +3002,35 @@
   }
 
   async function bootstrap() {
-    const cached = loadCachedData();
+    // Read again now and take data, sha, base and unsaved flag from that one snapshot; listen for
+    // other tabs in the same step so no write can slip in between.
+    const snap = readLocalSnapshot();
+    state.fileSha = snap.sha;
+    state.baseData = snap.base;
+    dirty = snap.dirty;
+    lastSnapId = snap.id;
+    legacyKeysPending = snap.pending;
+    window.addEventListener("storage", onOtherTabWrite);
     // A parsed cache — even an empty one — wins, so deleting everything doesn't resurrect the sample seed.
-    if (cached && typeof cached === "object") {
-      state.data = normalizeData(cached);
+    if (snap.data) {
+      state.data = normalizeData(snap.data);
     } else {
       try {
         const res = await fetch("./data/projects.json", { cache: "no-store" });
-        if (res.ok) {
-          state.data = normalizeData(await res.json());
+        const seed = res.ok ? await res.json() : null;
+        // Another tab may have stored data while the seed was loading; that copy wins.
+        if (seed && lastSnapId === snap.id) {
+          state.data = normalizeData(seed);
           cacheDataLocally();
           setDirty(false);
         }
       } catch (_) {}
     }
-    setDirty(dirty);
+    showDirty();
+    if (bootNote) {
+      toast(bootNote, "warning", undoAction());
+      bootNote = "";
+    }
     updateAuthBadge();
     updateLeaderUi();
     if (state.settings.pat) fetchGithubUser();
@@ -3260,7 +3508,7 @@
 
   // ---------- Render shell ----------
   function render() {
-    if (document.body) document.body.classList.toggle("read-only", !canEdit());
+    applyEditClasses();
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       const active =
         btn.dataset.view === state.view ||
@@ -4974,7 +5222,10 @@
       });
       const note = document.createElement("p");
       note.className = "hint";
-      note.textContent = "Statuses, task types, project types and structure types are shared by the whole team and can only be changed by the team leader.";
+      note.textContent =
+        isLeader() && roleCanEdit()
+          ? "Shared lists are read-only right now — " + readOnlyReason()
+          : "Statuses, task types, project types and structure types are shared by the whole team and can only be changed by the team leader.";
       box.parentNode.insertBefore(note, box);
     }
     document.getElementById("set-cancel").onclick = closeOverlay;

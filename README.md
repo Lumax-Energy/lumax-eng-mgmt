@@ -112,6 +112,24 @@ UI filters scope All Tasks + type sheets only; Dashboard / Projects / SCL / Summ
 - `normalizeData()` upgrades older payloads (Done phase, commercial fields, `municipalSignOff`, SCL settings, task types).
 - `wire()` is null-safe for missing header buttons (preserves #3 fix).
 
+### Several tabs in one browser
+
+- Each tab keeps its local copy in one localStorage key, `lumax-eng-mgmt-sync` = `{v, sha, dirty, data, tab, at, id, parent}`, written in a single step. Data, GitHub SHA and the unsaved flag therefore always come from the same tab and moment. The merge base sits in `lumax-eng-mgmt-base` as `{sha, data}` and is used after a reload only if its `sha` matches the snapshot's. Otherwise there is no base, and a Save conflict asks before merging.
+- The old keys (`lumax-eng-mgmt-data`, `-sha`, `-dirty`) are moved into the snapshot once at start-up and then removed. The unsaved flag is kept; the old base is dropped.
+- When another tab saves or edits:
+  - A tab with no unsaved changes takes over that copy ("Updated from another tab").
+  - So does a tab whose latest copy the other tab built on.
+  - Otherwise the tab shows a banner: *Your data was changed in another tab. Save this tab's changes (they will be merged) or Reload.* Edits are blocked ("Changed in another tab — Save or Reload first."), but **Save** still works and clears the banner. Reload asks first if there are unsaved changes and keeps a backup copy.
+- The leader team view, a tab with an open form, and a tab in the middle of Load/Save always show the banner instead of taking over the other copy.
+
+**Manual test checklist (several tabs)**
+
+- [ ] **(a)** Open tabs A and B. In A, edit a task, add a new task and Save. In B, edit a different task, reload B, then Save. GitHub must have A's edit, A's new task and B's edit.
+- [ ] **(a′)** Open tabs A and B. In B, open a project's edit form and leave it open. In A, edit a task. B shows the banner. Close B's form: edit buttons are hidden, the *Read-only* badge explains why, and **Save** is still visible. Save in B (the banner clears), then Save in A: A's edit ends up on GitHub.
+- [ ] **(b)** Import a JSON file, reload, then Save. The *Remote data differs from this browser…* confirm must appear.
+- [ ] **(c)** Change the Engineer ID (new repo), reload, then Save to the new repo. There must be no stale-SHA error (422 / *Merge & retry*).
+- [ ] **(d)** With unsaved changes in a tab that shows the banner, click **Reload**. It asks first; Cancel keeps everything as it was.
+
 ## Sample data
 
 `data/projects.json` ships with **≥4 clearly labeled SAMPLE** projects (fictional Demo clients / DEMO-* codes), multiple assignees, ≥2 in Site investigation, varied structure types, mixed task types, one project **ready to create** (INV+contact+address+Done), and one **already issued**. Safe to edit or delete after onboarding.
