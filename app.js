@@ -1372,39 +1372,31 @@
   function displayConformanceRef(ref) {
     return (ref || "").trim();
   }
+  // Trimmed, sorted, one entry per name ignoring case (first spelling seen wins). The browse
+  // cards and the views/filters they open all match case-insensitively, so case variants
+  // would otherwise show as separate cards that each count the combined set.
+  function uniqueIgnoringCase(values) {
+    const seen = new Map();
+    values.forEach((v) => {
+      const s = String(v == null ? "" : v).trim();
+      if (s && !seen.has(s.toLowerCase())) seen.set(s.toLowerCase(), s);
+    });
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }
+  // Settings spelling first, then projects, then tasks.
   function uniqueStructureTypes() {
-    const set = new Set(getStructureTypes());
-    (state.data.projects || []).forEach((p) => {
-      (p.structureTypes || []).forEach((s) => {
-        const t = String(s || "").trim();
-        if (t) set.add(t);
-      });
-    });
-    (state.data.tasks || []).forEach((t) => {
-      if (t.structureType) set.add(String(t.structureType).trim());
-      (t.structureTypes || []).forEach((s) => {
-        const x = String(s || "").trim();
-        if (x) set.add(x);
-      });
-    });
-    return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+    const all = getStructureTypes();
+    const list = (v) => (Array.isArray(v) ? v : []);
+    (state.data.projects || []).forEach((p) => all.push(...list(p.structureTypes)));
+    (state.data.tasks || []).forEach((t) => all.push(t.structureType, ...list(t.structureTypes)));
+    return uniqueIgnoringCase(all);
   }
   // Leader view scope: clients/assignees listed are those of the engineer on screen.
   function uniqueClients() {
-    const set = new Set();
-    scopedProjects({ includeArchived: true }).forEach((p) => {
-      const c = (p.clientName || "").trim();
-      if (c) set.add(c);
-    });
-    return [...set].sort((a, b) => a.localeCompare(b));
+    return uniqueIgnoringCase(scopedProjects({ includeArchived: true }).map((p) => p.clientName));
   }
   function uniqueAssignees() {
-    const set = new Set();
-    scopedTasks({ includeArchived: true }).forEach((t) => {
-      const a = (t.assignee || "").trim();
-      if (a) set.add(a);
-    });
-    return [...set].sort((a, b) => a.localeCompare(b));
+    return uniqueIgnoringCase(scopedTasks({ includeArchived: true }).map((t) => t.assignee));
   }
   function getDashboardView(id) {
     return DASHBOARD_VIEWS.find((v) => v.id === id) || null;
@@ -3492,7 +3484,8 @@
     }
 
     if (viewDef && viewDef.browse === "assignees") {
-      const open = scopedTasks().filter((t) => statusIsOpen(t.statusId));
+      // Same task set as the Tasks list the card opens (archived-project tasks included)
+      const open = scopedTasks({ includeArchived: true }).filter((t) => statusIsOpen(t.statusId));
       renderBrowsePanel(root, {
         title: "Engineer",
         hint: "Click an assignee to open Tasks filtered by that person.",
