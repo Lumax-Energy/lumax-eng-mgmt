@@ -543,6 +543,9 @@
       throw new Error("Cannot undo: that record belongs to " + rec._eng + ". Unlock the leader view and Load first.");
     }
   }
+  // taskId -> { projectId, phaseId } for tasks whose Undo brought them back standalone because
+  // their project had been deleted in the meantime; the project's Undo restores these links.
+  const orphanedTaskLinks = new Map();
   function deleteTask(taskId) {
     if (guardEdit()) return null;
     const idx = (state.data.tasks || []).findIndex((x) => x.id === taskId);
@@ -557,6 +560,8 @@
         if (getTask(removed.id)) return;
         const rec = JSON.parse(JSON.stringify(removed));
         if (rec.projectId && !getProject(rec.projectId)) {
+          // Remember the link so undoing that project's delete later re-links this task too.
+          orphanedTaskLinks.set(rec.id, { projectId: rec.projectId, phaseId: rec.phaseId || null });
           rec.projectId = null;
           rec.phaseId = null;
         }
@@ -602,6 +607,16 @@
         unlinked.forEach((id) => {
           const t = getTask(id);
           if (t && !t.projectId) t.projectId = removed.id;
+        });
+        // Tasks deleted before this project and undone after it came back standalone: re-link them
+        // (and their phase, if it still exists) unless they were linked elsewhere since.
+        orphanedTaskLinks.forEach((link, id) => {
+          if (link.projectId !== removed.id) return;
+          orphanedTaskLinks.delete(id);
+          const t = getTask(id);
+          if (!t || t.projectId) return;
+          t.projectId = removed.id;
+          if (!t.phaseId && link.phaseId && (removed.phases || []).some((ph) => ph.id === link.phaseId)) t.phaseId = link.phaseId;
         });
         const list = voided && state.data.settings && state.data.settings.voidedLetters;
         if (Array.isArray(list)) {
